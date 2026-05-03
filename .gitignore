@@ -1,0 +1,4 @@
+## add more items to ignore below and comment why
+
+#ignore .venv directory which contains environment variables
+.venv
