@@ -111,6 +111,22 @@ attack
 - if item is equipped use the item's attack damage
 - if item has an ATTACK effect apply that.
 
+move up
+
+- y+1
+
+move down
+
+- y-1
+
+move left
+
+- x-1
+
+move right
+
+- x+1
+
 defend
 
 - if no item equipped, or item does not have a defend value, reduce incoming attack damage by 1
@@ -167,6 +183,15 @@ View distance
 - number of squares the player or enemy can see
 - vision for the player is represented by the amount of map revealed
 - default is 1
+
+reinforcement
+
+- monster exclusive statistic
+- array of integers ranging from 1-10 representing all possible commands
+- getting hurt decreases the value by 1 for the last used command
+- healing(increasing HP) increases the value by 1 for the last used command
+- doing damage increases the value 2 for the last used command
+- move commands do not decrease below 3
 
 ### items
 
@@ -235,34 +260,47 @@ DEFEND effects
 increase HP
 
 - can be a USE, PASSIVE, EQUIP effect
+- armor or spell
 
 decrease HP
 
 - can be a USE, PASSIVE, EQUIP effect
+- weapon, armor, spell
 
 increase Mana
 
 - can be a USE, PASSIVE, EQUIP effect
+- armor or spell
 
 decrease Mana
 
 - can be a USE, PASSIVE, EQUIP effect
+- weapon armor or spell
 
 increase attack
 
 - can be a USE, PASSIVE, EQUIP effect
+- weapon armor or spell
 
 decrease attack
 
 - can be a USE, PASSIVE, EQUIP effect
+- weapon armor or spell
 
 increase view distance
 
 - can be a USE, PASSIVE, EQUIP effect
+- weapon armor or spell
 
 decrease view distance
 
 - can be a USE, PASSIVE, EQUIP effect
+- armor or spell
+
+range
+
+- increases range (random number 1 to 10) of attacks or spells
+- can be a USE PASSIVE, EQUIP, DEFEND effect
 
 ### monsters
 
@@ -301,19 +339,56 @@ outside squares are all walls
   - write these values to weapons.cfg
 - initialize list of armors
   - each armor will have a name and a DEFEND effect
+  - write these values to armor.cfg
 - initialize list of spells
   - generate a number of spells, for each one pick random effects
+  - write these values to spells.cfg
 - initialize player stats
 - write player stats to file charsheet.cfg
 - initialize the map
 - write the map to file map.map
+- update the map section of the screen
+- update the stats section of the screen
 - intialize monsters
   - assign a weapon, armor and spell
   - assign a location on the map (update the map.map file)
   - assign a name(no duplicates)
+  - assign random states (1-10)
+  - assign a reinforcement stat
   - write entries to monsters.cfg
 - give the player a starting spell, weapon and armor
   - update charsheet.cfg
 - place the player on the map
+  - update the map portion of the screen
   - update the map.map
 - print the introductory message(from file intro.msg)
+- player enters command
+  - update position on map.map and in charsheet.cfg
+  - redraw the map based on the player's view distance stat
+- each other monster enters in commands at random using their reinforcement stat to weight decisions
+- loop back to waiting for player input
+- continue until player lands on the exit square or player HP=0
+- if player lands on exit print the victory message victory.msg
+- if player HP=0 print the defeat message defeat.msg
+- end the program
+
+### project structure
+
+- use any relavant python modules, maintain a requirement.txt
+- use kivy for the graphical window
+- create a python virtual environment to work in
+- update gitignore to include relavent entries
+- update readme.md with install instructions
+- store game files in data folder
+- use the utilities folder additional scripts
+- name generator script
+  - names for players and monsters
+  - stored in names.names
+- item generator script
+- armor generator script
+- weapon generator script
+- spell generator script
+- map component script
+  - generates different iterations of door and wall arrangements
+- random map script
+  - uses the components to assemble a map in the file map.map

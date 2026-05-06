@@ -6,14 +6,14 @@ I use github copilot for my day day job and its helped me quite a bit. I haven't
 
 I'd like to say I know completely what I'm doing but this isn't a place for lying to myself or anyone else. I have a rough idea of doing all the code via prompt files, writing a bunch of words, commissioning some art and
 
-I think asking it to do the boring bit(code) is ok. Asking it to make art or write the text? NO GO. 
+I think asking it to do the boring bit(code) is ok. Asking it to make art or write the text? NO GO.
 
 ## A plan
 
 - write the prompt_initial.md file
   - I think the fancy vibe coder people want you to call it planning.md file or whatever. I don't care. Its a file name.
 - have github copilot build out the project
-  - it will make a bunch of mistakes, which is fine. This is how we learn how the project is built, which is important as we move into more complex steps. 
+  - it will make a bunch of mistakes, which is fine. This is how we learn how the project is built, which is important as we move into more complex steps.
 - write flavor text
   - intro
   - outro
