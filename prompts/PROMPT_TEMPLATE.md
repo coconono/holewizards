@@ -51,7 +51,9 @@ How this feature appears to the player (if visual).
 ### Example Layout
 
 ```
+
 [ASCII representation or description]
+
 ```
 
 ---
@@ -75,9 +77,11 @@ Any new data types, classes, or state needed:
 ### Class/Structure Name
 
 ```
+
 - Property 1: type
 - Property 2: type
 - Method/Action: description
+
 ```
 
 ---
@@ -186,6 +190,7 @@ Description of enemy AI behavior.
 ## When to Create a New Prompt File
 
 Create a new `prompt_*.md` file when:
+
 - Adding a major new system (combat, magic, crafting, etc.)
 - Significantly expanding an existing system
 - Need to document complex mechanics before implementation
