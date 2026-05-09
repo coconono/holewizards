@@ -1,0 +1,59 @@
+# Font Configuration - Quick Reference
+
+## Change Font
+
+```bash
+python3 utilities/font_manager.py
+```
+
+Select from available fonts:
+1. `20db.otf` - Decorative
+2. `2Dumb.ttf` - Fun, chunky (default)
+3. `3Dumb.ttf` - Chunky variant
+4. `ABeeZee-Regular.otf` - Clean serif
+
+Or set directly:
+```bash
+python3 utilities/font_manager.py ABeeZee-Regular.otf
+```
+
+## How Font Selection Works
+
+1. **Game Startup**: Reads `data/settings.cfg`
+2. **Font Loading**: Loads TTF/OTF from `data/fonts/` folder
+3. **Fallback**: Uses system default if custom font fails
+4. **Text Mode**: Ignores font settings (terminal rendering)
+
+## Add Custom Fonts
+
+1. Place `.ttf` or `.otf` file in `data/fonts/`
+2. Run font manager and select it
+
+Example:
+```bash
+cp /path/to/myfont.ttf data/fonts/
+python3 utilities/font_manager.py myfont.ttf
+```
+
+## Configuration File
+
+Edit `data/settings.cfg`:
+```ini
+[display]
+font = 2Dumb.ttf
+```
+
+Leave empty for system default:
+```ini
+[display]
+font = 
+```
+
+## Current Font
+
+Check current font:
+```bash
+python3 utilities/font_manager.py  # Shows current font with ← marker
+```
+
+Or edit `data/settings.cfg` directly.

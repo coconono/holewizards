@@ -21,7 +21,7 @@ class Enemy:
         self.equipped_armor = None
         self.equipped_spell = None
         self.alive = True
-        self.view_distance = 1
+        self.view_distance = 5
         self.reinforcement = [5] * 10  # Weights for 10 different actions
         self.last_action = None
         self.defending = False

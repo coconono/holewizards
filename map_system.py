@@ -109,7 +109,12 @@ class Map:
         player.position["x"] = 2
         player.position["y"] = 2
         self.tiles[2][2].player = player
-        self.player_view.add((2, 2))
+        
+        # Add all tiles within view distance to player_view
+        view_distance = player.view_distance
+        for y in range(max(0, 2 - view_distance), min(self.height, 2 + view_distance + 1)):
+            for x in range(max(0, 2 - view_distance), min(self.width, 2 + view_distance + 1)):
+                self.player_view.add((x, y))
 
     def place_enemy(self, enemy, x, y):
         """Place an enemy on the map."""
@@ -118,6 +123,17 @@ class Map:
             enemy.position["x"] = x
             enemy.position["y"] = y
             return True
+        return False
+
+    def remove_enemy(self, enemy):
+        """Remove an enemy from the map."""
+        x = enemy.position["x"]
+        y = enemy.position["y"]
+        if self.is_valid_position(x, y):
+            tile = self.tiles[y][x]
+            if tile.enemy == enemy:
+                tile.enemy = None
+                return True
         return False
 
     def move_player(self, player, dx, dy):
@@ -138,8 +154,11 @@ class Map:
                 player.position["x"] = new_x
                 player.position["y"] = new_y
                 
-                # Mark as explored
-                self.player_view.add((new_x, new_y))
+                # Add all tiles within view distance to player_view
+                view_distance = player.view_distance
+                for y in range(max(0, new_y - view_distance), min(self.height, new_y + view_distance + 1)):
+                    for x in range(max(0, new_x - view_distance), min(self.width, new_x + view_distance + 1)):
+                        self.player_view.add((x, y))
                 
                 return True
         return False
@@ -190,16 +209,28 @@ class Map:
         """Check if player reached the exit."""
         return (player.position["x"], player.position["y"]) == (self.width - 3, self.height - 3)
 
-    def get_visible_map(self, player):
-        """Get a string representation of the map from the player's perspective."""
+    def get_visible_map(self, player, x_distance=None, y_distance=None):
+        """Get a string representation of the map from the player's perspective.
+        
+        Args:
+            player: The player object
+            x_distance: How far horizontally to display (if None, defaults to view_distance * 3)
+            y_distance: How far vertically to display (if None, defaults to view_distance)
+        """
         output = []
-        view_distance = player.view_distance
+        
+        # Use different display distances for X and Y (wider than tall)
+        if x_distance is None:
+            x_distance = max(20, player.view_distance * 3)
+        if y_distance is None:
+            y_distance = max(8, player.view_distance * 2)
+        
         px = player.position["x"]
         py = player.position["y"]
 
-        for y in range(max(0, py - view_distance), min(self.height, py + view_distance + 1)):
+        for y in range(max(0, py - y_distance), min(self.height, py + y_distance + 1)):
             row = []
-            for x in range(max(0, px - view_distance), min(self.width, px + view_distance + 1)):
+            for x in range(max(0, px - x_distance), min(self.width, px + x_distance + 1)):
                 if (x, y) in self.player_view or (x, y) == (px, py):
                     row.append(self.tiles[y][x].get_display_char())
                 else:

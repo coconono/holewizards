@@ -93,6 +93,25 @@ class GameState:
             return tile.enemy
         return None
 
+    def get_adjacent_enemy(self):
+        """Get an adjacent enemy (within melee range)."""
+        px = self.player.position["x"]
+        py = self.player.position["y"]
+        
+        # Check all adjacent tiles (8 directions)
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                if dx == 0 and dy == 0:
+                    continue  # Skip current position
+                
+                nx = px + dx
+                ny = py + dy
+                tile = self.map.get_tile(nx, ny)
+                if tile and tile.enemy and tile.enemy.alive:
+                    return tile.enemy
+        
+        return None
+
     def player_move(self, dx, dy):
         """Move the player on the map."""
         return self.map.move_player(self.player, dx, dy)
@@ -155,10 +174,10 @@ class GameState:
         return False, "Cannot use this item"
 
     def player_attack(self):
-        """Have the player attack the current enemy."""
-        enemy = self.get_current_enemy()
+        """Have the player attack an adjacent enemy."""
+        enemy = self.get_adjacent_enemy()
         if not enemy:
-            return False, "No enemy to attack"
+            return False, "No enemy in range"
         
         if not enemy.alive:
             return False, "Enemy is already dead"
@@ -169,6 +188,8 @@ class GameState:
         if enemy.alive:
             return True, f"Attacked {enemy.name} for {damage} damage! ({enemy.hp} HP remaining)"
         else:
+            # Remove dead enemy from map
+            self.map.remove_enemy(enemy)
             xp_gained = enemy.xp
             self.player.gain_xp(xp_gained)
             return True, f"Defeated {enemy.name}! Gained {xp_gained} XP!"

@@ -18,7 +18,7 @@ class Player:
         self.equipped_armor = None
         self.equipped_spell = None
         self.alive = True
-        self.view_distance = 1
+        self.view_distance = 3
         self.defending = False
 
     def take_damage(self, damage):

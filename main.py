@@ -11,31 +11,70 @@ from game_state import GameState
 from ui import UI
 from commands import CommandParser
 
+# Try to import pygame for graphical UI
+try:
+    from graphics import GraphicalUI
+    GRAPHICS_AVAILABLE = True
+except ImportError:
+    GRAPHICS_AVAILABLE = False
+
 
 class Game:
     """Main game controller."""
 
-    def __init__(self):
-        """Initialize the game."""
+    def __init__(self, use_graphics=True):
+        """Initialize the game.
+        
+        Args:
+            use_graphics: Whether to use graphical UI (requires pygame)
+        """
         self.state = GameState()
-        self.ui = UI()
         self.running = True
         self.should_show_intro = True
+        self.quit_game = False
+        
+        # Choose UI backend
+        self.use_graphics = False
+        self.ui = None
+        self.text_ui = None
+        
+        if use_graphics and GRAPHICS_AVAILABLE:
+            try:
+                graphics_ui = GraphicalUI()
+                self.use_graphics = True
+                self.ui = graphics_ui
+                self.text_ui = None
+                print("✓ Graphics mode initialized (fallback rendering available)")
+            except Exception as e:
+                print(f"⚠ Graphics initialization failed: {e}")
+                print("Falling back to text mode")
+                self.ui = UI()
+                self.text_ui = self.ui
+        else:
+            self.ui = UI()
+            self.text_ui = self.ui
 
     def render(self):
         """Render the current game state."""
-        os.system("clear" if os.name == "posix" else "cls")
-        
-        current_enemy = self.state.get_current_enemy()
-        screen = self.ui.render_full_screen(
-            self.state.player,
-            current_enemy,
-            self.state.map,
-            self.state.current_stats_page,
-            self.state.chest_items
-        )
-        print(screen)
-        print(self.ui.render_command_prompt(), end="", flush=True)
+        if self.use_graphics:
+            # Graphical rendering
+            current_enemy = self.state.get_current_enemy()
+            map_display = self.state.map.get_visible_map(self.state.player, x_distance=49, y_distance=6)
+            self.ui.render(self.state.player, current_enemy, map_display, self.state.current_stats_page)
+            self.ui.tick()
+        else:
+            # Text rendering
+            os.system("clear" if os.name == "posix" else "cls")
+            current_enemy = self.state.get_current_enemy()
+            screen = self.text_ui.render_full_screen(
+                self.state.player,
+                current_enemy,
+                self.state.map,
+                self.state.current_stats_page,
+                self.state.chest_items
+            )
+            print(screen)
+            print(self.text_ui.render_command_prompt(), end="", flush=True)
 
     def process_command(self, command_string):
         """Process a player command."""
@@ -76,45 +115,93 @@ class Game:
             self.ui.add_log_message("No chest nearby (feature coming soon)")
 
         elif cmd_type == "list_commands":
-            self.ui.clear_log()
-            self.ui.add_log_message(self.ui.render_help())
+            self.show_help()
+
+        elif cmd_type == "legend":
+            self.show_legend()
+
+        elif cmd_type == "quit":
+            self.ui.add_log_message("Thanks for playing Hole Wizards!")
+            self.quit_game = True
+            self.running = False
+            return
+
+        elif cmd_type == "restart":
+            self.ui.add_log_message("Restarting game...")
+            self.state = GameState()
+            self.ui = UI()
+            self.should_show_intro = True
+            self.running = False
+            return
 
         # Movement commands
         elif cmd_type == "move_up":
             if self.state.player_move(0, -1):
                 self.ui.add_log_message("Moved up")
-                enemy = self.state.get_current_enemy()
+                enemy = self.state.get_adjacent_enemy()
                 if enemy and enemy.alive:
-                    self.ui.add_log_message(f"You encounter {enemy.name}!")
+                    self.ui.add_log_message(f"You spot {enemy.name} nearby!")
             else:
                 self.ui.add_log_message("Cannot move up - blocked")
 
         elif cmd_type == "move_down":
             if self.state.player_move(0, 1):
                 self.ui.add_log_message("Moved down")
-                enemy = self.state.get_current_enemy()
+                enemy = self.state.get_adjacent_enemy()
                 if enemy and enemy.alive:
-                    self.ui.add_log_message(f"You encounter {enemy.name}!")
+                    self.ui.add_log_message(f"You spot {enemy.name} nearby!")
             else:
                 self.ui.add_log_message("Cannot move down - blocked")
 
         elif cmd_type == "move_left":
             if self.state.player_move(-1, 0):
                 self.ui.add_log_message("Moved left")
-                enemy = self.state.get_current_enemy()
+                enemy = self.state.get_adjacent_enemy()
                 if enemy and enemy.alive:
-                    self.ui.add_log_message(f"You encounter {enemy.name}!")
+                    self.ui.add_log_message(f"You spot {enemy.name} nearby!")
             else:
                 self.ui.add_log_message("Cannot move left - blocked")
 
         elif cmd_type == "move_right":
             if self.state.player_move(1, 0):
                 self.ui.add_log_message("Moved right")
-                enemy = self.state.get_current_enemy()
+                enemy = self.state.get_adjacent_enemy()
                 if enemy and enemy.alive:
-                    self.ui.add_log_message(f"You encounter {enemy.name}!")
+                    self.ui.add_log_message(f"You spot {enemy.name} nearby!")
             else:
                 self.ui.add_log_message("Cannot move right - blocked")
+
+        elif cmd_type == "move":
+            # args is a tuple of (x, y) coordinates
+            if args and isinstance(args, tuple) and len(args) == 2:
+                target_x, target_y = args
+                
+                # Keep moving until destination, blocked, or enemy encountered
+                while True:
+                    current_x = self.state.player.position["x"]
+                    current_y = self.state.player.position["y"]
+                    
+                    # Check if reached destination
+                    if current_x == target_x and current_y == target_y:
+                        self.ui.add_log_message(f"Reached destination ({target_x}, {target_y})")
+                        break
+                    
+                    # Calculate next step
+                    dx = 0 if current_x == target_x else (1 if target_x > current_x else -1)
+                    dy = 0 if current_y == target_y else (1 if target_y > current_y else -1)
+                    
+                    # Try to move
+                    if self.state.player_move(dx, dy):
+                        # Check for adjacent enemy encounter
+                        enemy = self.state.get_adjacent_enemy()
+                        if enemy and enemy.alive:
+                            self.ui.add_log_message(f"You spot {enemy.name} nearby!")
+                            break
+                    else:
+                        self.ui.add_log_message("Path blocked - stopped moving")
+                        break
+            else:
+                self.ui.add_log_message("Invalid coordinates. Use: move x,y")
 
         # Combat commands
         elif cmd_type == "attack":
@@ -122,7 +209,7 @@ class Game:
             self.ui.add_log_message(message)
             
             if success:
-                enemy = self.state.get_current_enemy()
+                enemy = self.state.get_adjacent_enemy()
                 if enemy and enemy.alive:
                     # Enemy counterattack
                     self.state.enemy_take_turn(enemy)
@@ -172,8 +259,11 @@ class Game:
 
     def show_intro(self):
         """Show the game intro."""
-        os.system("clear" if os.name == "posix" else "cls")
-        intro_text = """
+        if self.use_graphics:
+            self.ui.render_intro_screen()
+        else:
+            os.system("clear" if os.name == "posix" else "cls")
+            intro_text = """
 ╔═══════════════════════════════════════════════════════════════════════╗
 ║                     WELCOME TO HOLE WIZARDS                           ║
 ║                                                                       ║
@@ -189,15 +279,47 @@ class Game:
 ║                                                                       ║
 ╚═══════════════════════════════════════════════════════════════════════╝
         """
-        print(intro_text)
-        input("Press Enter to begin...")
+            print(intro_text)
+            input("Press Enter to begin...")
+
+    def show_help(self):
+        """Display the help screen."""
+        if self.use_graphics:
+            help_text = UI().render_help()  # Use text UI to generate help text
+            self.ui.showing_full_screen = "help"
+            self.ui.render_help_screen(help_text)
+        else:
+            os.system("clear" if os.name == "posix" else "cls")
+            help_screen = self.text_ui.render_help()
+            print(help_screen)
+            input("\nPress Enter to return to the game...")
+
+    def show_legend(self):
+        """Display the legend screen."""
+        if self.use_graphics:
+            legend_text = UI().render_legend()  # Use text UI to generate legend text
+            self.ui.showing_full_screen = "legend"
+            self.ui.render_help_screen(legend_text)
+        else:
+            os.system("clear" if os.name == "posix" else "cls")
+            legend_screen = self.text_ui.render_legend()
+            print(legend_screen)
+            input("\nPress Enter to return to the game...")
 
     def show_game_over(self, result):
         """Show game over screen."""
-        os.system("clear" if os.name == "posix" else "cls")
-        
-        if result == "victory":
-            victory_text = """
+        if self.use_graphics:
+            # Show graphics mode victory/defeat screen
+            if result == "victory":
+                self.ui.render_victory_screen()
+            else:
+                self.ui.render_defeat_screen()
+        else:
+            # Text mode
+            os.system("clear" if os.name == "posix" else "cls")
+            
+            if result == "victory":
+                victory_text = """
 ╔═══════════════════════════════════════════════════════════════════════╗
 ║                         VICTORY!                                      ║
 ║                                                                       ║
@@ -207,10 +329,10 @@ class Game:
 ║  You emerge from the darkness into the light... a hero!              ║
 ║                                                                       ║
 ╚═══════════════════════════════════════════════════════════════════════╝
-            """
-            print(victory_text)
-        else:
-            defeat_text = """
+                """
+                print(victory_text)
+            else:
+                defeat_text = """
 ╔═══════════════════════════════════════════════════════════════════════╗
 ║                         DEFEAT!                                       ║
 ║                                                                       ║
@@ -220,13 +342,13 @@ class Game:
 ║  Your remains will rest in the darkness forever...                   ║
 ║                                                                       ║
 ╚═══════════════════════════════════════════════════════════════════════╝
-            """
-            print(defeat_text)
-        
-        print("\nFinal Stats:")
-        print(f"  Level: {self.state.player.level}")
-        print(f"  XP: {self.state.player.xp}")
-        print(f"  Items: {len(self.state.player.inventory)}")
+                """
+                print(defeat_text)
+            
+            print("\nFinal Stats:")
+            print(f"  Level: {self.state.player.level}")
+            print(f"  XP: {self.state.player.xp}")
+            print(f"  Items: {len(self.state.player.inventory)}")
 
     def run(self):
         """Run the main game loop."""
@@ -245,21 +367,48 @@ class Game:
             self.render()
 
             # Get player input
-            try:
-                command = input().strip()
-                if command:
+            if self.use_graphics:
+                # Graphical input
+                command = self.ui.handle_events()
+                if command == "quit":
+                    self.quit_game = True
+                    self.running = False
+                elif command:
                     self.process_command(command)
-            except (KeyboardInterrupt, EOFError):
-                print("\nThanks for playing Hole Wizards!")
-                self.running = False
-                break
+            else:
+                # Text input
+                try:
+                    command = input().strip()
+                    if command:
+                        self.process_command(command)
+                except (KeyboardInterrupt, EOFError):
+                    print("\nThanks for playing Hole Wizards!")
+                    self.running = False
+                    break
 
 
 def main():
     """Entry point for the game."""
     try:
-        game = Game()
-        game.run()
+        # Check command line arguments
+        use_graphics = "--text" not in sys.argv
+        
+        if use_graphics and not GRAPHICS_AVAILABLE:
+            print("Note: Pygame not installed. Falling back to text mode.")
+            print("Install pygame with: pip install pygame")
+            use_graphics = False
+        
+        while True:
+            game = Game(use_graphics=use_graphics)
+            game.run()
+            
+            # If player quit, exit the main loop
+            if game.quit_game:
+                break
+            
+            # If not showing intro (game ended normally), exit the main loop
+            if not game.should_show_intro:
+                break
     except Exception as e:
         print(f"Error: {e}")
         import traceback

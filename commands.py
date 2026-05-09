@@ -14,12 +14,16 @@ class CommandParser:
         "show_enemy_inventory": r"^show\s+enemy\s+inventory$",
         "show_chest_inventory": r"^show\s+chest\s+inventory$",
         "list_commands": r"^list\s+commands$|^help$",
+        "legend": r"^legend$",
+        "quit": r"^quit$",
+        "restart": r"^restart$",
         "take": r"^take\s+['\"]?(.+?)['\"]?$",
         "drop": r"^drop\s+['\"]?(.+?)['\"]?$",
         "equip": r"^equip\s+['\"]?(.+?)['\"]?$",
         "use": r"^use\s+['\"]?(.+?)['\"]?$",
         "attack": r"^attack$",
         "defend": r"^defend$",
+        "move": r"^move\s+(\d+)[,\s]+(\d+)$",
         "move_up": r"^move\s+up$",
         "move_down": r"^move\s+down$",
         "move_left": r"^move\s+left$",
@@ -35,7 +39,11 @@ class CommandParser:
             match = re.match(pattern, command_string)
             if match:
                 if match.groups():
-                    return (cmd_type, match.group(1).strip())
+                    if cmd_type == "move" and len(match.groups()) >= 2:
+                        # Return tuple of coordinates for move command
+                        return (cmd_type, (int(match.group(1)), int(match.group(2))))
+                    else:
+                        return (cmd_type, match.group(1).strip())
                 else:
                     return (cmd_type, None)
         

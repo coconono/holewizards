@@ -1,5 +1,5 @@
 # Core game runs on Python standard library
-# No external dependencies required for MVP
-# Future additions may include:
-# - kivy (for graphical version)
-# - pygame (alternative graphics)
+# Graphical version requires:
+pygame>=2.0.0
+
+# Text version uses no external dependencies

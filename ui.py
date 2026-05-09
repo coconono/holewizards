@@ -4,7 +4,7 @@
 class UI:
     """Handles all UI display and rendering."""
 
-    def __init__(self, map_width=40, stats_width=30):
+    def __init__(self, map_width=100, stats_width=30):
         """Initialize the UI."""
         self.map_width = map_width
         self.stats_width = stats_width
@@ -164,7 +164,12 @@ class UI:
 
     def render_full_screen(self, player, enemy, map_obj, page="player", chest_items=None):
         """Render the complete game screen (for reference, terminal will handle actual rendering)."""
-        map_display = map_obj.get_visible_map(player)
+        # Calculate display distances to fill available map area optimally
+        # X distance to fill map_width, Y distance to keep map compact
+        x_distance = (self.map_width - 1) // 2
+        y_distance = 6  # Show about 13 rows (6 above/below + center)
+        
+        map_display = map_obj.get_visible_map(player, x_distance=x_distance, y_distance=y_distance)
         stats_lines = self.render_stats_window(player, enemy, page, chest_items)
         
         # Build the screen
@@ -193,32 +198,86 @@ class UI:
     def render_help(self):
         """Render help/command list."""
         help_text = """
-═══════════════════════════════════════
-AVAILABLE COMMANDS
-═══════════════════════════════════════
+╔═══════════════════════════════════════════════════════════════════════╗
+║                     AVAILABLE COMMANDS                               ║
+╚═══════════════════════════════════════════════════════════════════════╝
 
-INFORMATION:
-  show player stats    - Display your stats
-  show enemy stats     - Display enemy stats
-  show player inventory - Display your inventory
-  show enemy inventory - Display enemy inventory (if dead)
-  show chest inventory - Display chest contents
-  list commands        - Show this help
+[INFORMATION]
 
-MOVEMENT:
-  move up/down/left/right - Move on the map
+  show player stats          → Display your character stats
+  show enemy stats           → Display enemy stats
+  show player inventory      → Display your inventory
+  show enemy inventory       → Display enemy inventory (if dead)
+  show chest inventory       → Display chest contents
+  legend                     → Show map legend
+  list commands              → Show this help
 
-COMBAT:
-  attack               - Attack the enemy
-  defend               - Reduce incoming damage
+[MOVEMENT]
 
-ITEMS & SPELLS:
-  take [item]          - Pick up an item
-  drop [item]          - Drop an item
-  equip [item]         - Equip an item/spell
-  use [item]           - Use/consume an item
+  move up | move down        → Move vertically
+  move left | move right     → Move horizontally
+  move x,y                   → Move toward coordinates (auto-path)
 
-GOAL: Find the exit (X) and escape!
-═══════════════════════════════════════
+[COMBAT]
+
+  attack                     → Attack an adjacent enemy
+  defend                     → Reduce next incoming damage
+
+[INVENTORY & ITEMS]
+
+  take [item]                → Pick up an item
+  drop [item]                → Drop an item
+  equip [item]               → Equip an item/spell
+  use [item]                 → Use/consume an item
+
+[CONTROL]
+
+  quit                       → Exit the game
+  restart                    → Start a new game
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║  GOAL: Find the exit (X) in the dungeon and escape alive!            ║
+╚═══════════════════════════════════════════════════════════════════════╝
         """
         return help_text
+
+    def render_legend(self):
+        """Render map legend."""
+        legend_text = """
+╔═══════════════════════════════════════════════════════════════════════╗
+║                          MAP LEGEND                                   ║
+╚═══════════════════════════════════════════════════════════════════════╝
+
+[CHARACTERS]
+
+  p          → Player (you)
+  m          → Monster/Enemy
+  E          → Entrance (start location)
+  X          → Exit (goal - escape here!)
+
+
+[TERRAIN]
+
+  █          → Wall (impassable, blocks movement)
+  ╬          → Door (closed)
+  ─          → Door (open)
+  (space)    → Open floor (walkable)
+
+
+[ITEMS]
+
+  ◆          → Item/Bag (equipment, weapons, armor)
+  ▪          → Consumable item (potions, etc.)
+
+
+[EXPLORATION]
+
+  ?          → Unexplored area (will reveal as you move)
+
+
+╔═══════════════════════════════════════════════════════════════════════╗
+║  Visibility: You can see 3 squares away.                             ║
+║  Enemies can see 5 squares away.                                     ║
+╚═══════════════════════════════════════════════════════════════════════╝
+        """
+        return legend_text
