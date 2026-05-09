@@ -7,6 +7,7 @@ The Hole Wizards graphical display can use custom fonts. Font selection is manag
 ## Available Fonts
 
 Located in `data/fonts/`:
+
 - `2Dumb.ttf` - Fun, chunky font (default)
 - `3Dumb.ttf` - Variant of 2Dumb
 - `ABeeZee-Regular.otf` - Clean, readable serif font
@@ -15,12 +16,14 @@ Located in `data/fonts/`:
 ## Changing Fonts
 
 1. Edit `data/settings.cfg`:
+
    ```ini
    [display]
    font = ABeeZee-Regular.otf
    ```
 
 2. Run the game:
+
    ```bash
    python3 main.py
    ```
@@ -35,7 +38,7 @@ Located in `data/fonts/`:
 
 ## Format
 
-- Leave blank to use system default: `font = `
+- Leave blank to use system default: `font =`
 - Specify font name: `font = 2Dumb.ttf`
 
 ## Troubleshooting

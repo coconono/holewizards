@@ -9,12 +9,14 @@
 When you run `python3 main.py`, you'll see a **1400x900 pixel window** with:
 
 ### UI Layout
+
 - **Top-Left (Green border)**: MAP display area
 - **Top-Right (Yellow border)**: STATS display area  
 - **Bottom (Cyan border)**: LOG/Messages area
 - **Bottom Input (Orange border)**: COMMAND input field
 
 ### Visual Indicators
+
 - **Grid lines** in map area (horizontal lines)
 - **Status bars** in stats area (horizontal lines)
 - **Log lines** in log area (horizontal lines)
@@ -26,11 +28,13 @@ When you run `python3 main.py`, you'll see a **1400x900 pixel window** with:
 The graphics module now has **two rendering modes**:
 
 ### 1. Normal Mode (With Fonts)
+
 - Full text rendering with proper fonts
 - Game information displayed clearly
 - Current status: **Not available** (pygame.font module has circular import issue)
 
 ### 2. Fallback Mode (Without Fonts)
+
 - Colored UI structure with borders
 - Grid patterns for visual feedback
 - Indicators showing active areas
@@ -48,7 +52,7 @@ The game is **fully playable in fallback graphics mode**:
 
 ## Supported Commands
 
-```
+```text
 move up/down/left/right     Move player
 attack                      Attack adjacent enemy
 defend                      Block damage
@@ -68,6 +72,7 @@ restart                      New game
 ## Text Mode Alternative
 
 If you prefer a traditional text interface:
+
 ```bash
 python3 main.py --text
 ```
@@ -85,12 +90,14 @@ When pygame.font is fixed in a newer pygame version:
 ## Technical Details
 
 **Graphics Fallback Architecture:**
+
 - `graphics.py.draw_fallback_ui()` - Renders colored borders and grid
 - `graphics.py.draw_fallback_status()` - Shows status indicators
 - `graphics.py.draw_simple_text()` - Draws line patterns for text position
 - `main.py` - Automatically uses graphics mode if pygame available
 
 **Configuration:**
+
 - Font settings in `data/settings.cfg`
 - Font files in `data/fonts/`
 - Fonts still load (attempt) for future compatibility

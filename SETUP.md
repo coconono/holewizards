@@ -51,6 +51,7 @@ On some systems (particularly macOS with homebrew Python 3.14), pygame.font may 
 **Workaround**: The game automatically detects this and falls back to text mode, which is fully functional and just as playable.
 
 **If you want graphical mode**: This requires a working pygame.font installation, which may need:
+
 - Different Python version
 - Different system configuration
 - System-level dependencies for SDL2
