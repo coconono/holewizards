@@ -10,6 +10,8 @@ from items import (
     create_hp_potion,
     create_mana_potion,
 )
+from pathlib import Path
+import configparser
 
 
 class GameState:
@@ -20,7 +22,7 @@ class GameState:
         self.player = Player()
         self.enemies = []
         self.map = Map(32, 32)
-        self.current_enemy = None
+        self.current_enemy = None  # Currently viewed enemy for stats display
         self.game_over = False
         self.victory = False
         self.current_stats_page = "player"
@@ -52,37 +54,123 @@ class GameState:
         # Create and place enemies
         self._spawn_enemies()
 
-    def _spawn_enemies(self):
-        """Spawn enemies on the map."""
-        enemy_names = ["Goblin", "Skeleton", "Orc", "Troll", "Wraith"]
-        num_enemies = 3
+    def _load_monsters_from_config(self):
+        """Load monster definitions from data/monsters.cfg."""
+        monsters = []
         
-        for i in range(num_enemies):
-            name = enemy_names[i % len(enemy_names)] + f"_{i}"
-            enemy = Enemy(name)
-            
-            # Give enemy random items
-            if i % 2 == 0:
-                weapon = create_starting_weapon()
-                enemy.add_to_inventory(weapon)
-                enemy.equip_weapon(weapon)
-            
-            if i % 3 == 0:
-                armor = create_starting_armor()
-                enemy.add_to_inventory(armor)
-                enemy.equip_armor(armor)
-            
-            self.enemies.append(enemy)
-            
-            # Place on map (avoid player start position)
-            placed = False
-            attempts = 0
-            while not placed and attempts < 10:
+        # Try multiple possible locations for the config file
+        possible_paths = [
+            Path(__file__).parent.parent / "data" / "monsters.cfg",
+            Path.cwd() / "data" / "monsters.cfg",
+        ]
+        
+        config_file = None
+        for path in possible_paths:
+            if path.exists():
+                config_file = path
+                break
+        
+        if not config_file:
+            return None  # Config file not found, use fallback
+        
+        config = configparser.ConfigParser()
+        config.read(config_file)
+        
+        for section in config.sections():
+            if section.startswith('monster_'):
+                monster_data = {
+                    'name': config.get(section, 'name', fallback='Unknown'),
+                    'description': config.get(section, 'description', fallback='insert funny text here'),
+                    'hp': config.getint(section, 'hp', fallback=5),
+                    'max_hp': config.getint(section, 'max_hp', fallback=5),
+                    'mana': config.getint(section, 'mana', fallback=1),
+                    'max_mana': config.getint(section, 'max_mana', fallback=1),
+                    'xp': config.getint(section, 'xp', fallback=1),
+                    'level': config.getint(section, 'level', fallback=1),
+                    'view_distance': config.getint(section, 'view_distance', fallback=5),
+                    'reinforcement': config.get(section, 'reinforcement', fallback='5,5,5,5,5,5,5,5,5,5'),
+                }
+                monsters.append(monster_data)
+        
+        return monsters if monsters else None
+
+    def _spawn_enemies(self):
+        """Spawn enemies on the map from config file."""
+        # Try to load monsters from config
+        monster_data_list = self._load_monsters_from_config()
+        
+        if monster_data_list:
+            # Use monsters from config file
+            for monster_data in monster_data_list:
+                enemy = Enemy(monster_data['name'])
+                enemy.hp = monster_data['hp']
+                enemy.max_hp = monster_data['max_hp']
+                enemy.mana = monster_data['mana']
+                enemy.max_mana = monster_data['max_mana']
+                enemy.xp = monster_data['xp']
+                enemy.level = monster_data['level']
+                enemy.view_distance = monster_data['view_distance']
+                
+                # Parse reinforcement values
+                try:
+                    reinforcement_values = [int(x) for x in monster_data['reinforcement'].split(',')]
+                    enemy.reinforcement = reinforcement_values
+                except (ValueError, AttributeError):
+                    enemy.reinforcement = [5] * 10  # Fallback
+                
+                # Give enemy random items
                 import random
-                x = random.randint(5, self.map.width - 5)
-                y = random.randint(5, self.map.height - 5)
-                placed = self.map.place_enemy(enemy, x, y)
-                attempts += 1
+                if random.random() < 0.5:
+                    weapon = create_starting_weapon()
+                    enemy.add_to_inventory(weapon)
+                    enemy.equip_weapon(weapon)
+                
+                if random.random() < 0.5:
+                    armor = create_starting_armor()
+                    enemy.add_to_inventory(armor)
+                    enemy.equip_armor(armor)
+                
+                self.enemies.append(enemy)
+                
+                # Place on map (avoid player start position)
+                placed = False
+                attempts = 0
+                while not placed and attempts < 10:
+                    x = random.randint(5, self.map.width - 5)
+                    y = random.randint(5, self.map.height - 5)
+                    placed = self.map.place_enemy(enemy, x, y)
+                    attempts += 1
+        else:
+            # Fallback: use hardcoded enemies
+            enemy_names = ["Goblin", "Skeleton", "Orc", "Troll", "Wraith"]
+            num_enemies = 3
+            
+            import random
+            for i in range(num_enemies):
+                name = enemy_names[i % len(enemy_names)] + f"_{i}"
+                enemy = Enemy(name)
+                
+                # Give enemy random items
+                if i % 2 == 0:
+                    weapon = create_starting_weapon()
+                    enemy.add_to_inventory(weapon)
+                    enemy.equip_weapon(weapon)
+                
+                if i % 3 == 0:
+                    armor = create_starting_armor()
+                    enemy.add_to_inventory(armor)
+                    enemy.equip_armor(armor)
+                
+                self.enemies.append(enemy)
+                
+                # Place on map (avoid player start position)
+                placed = False
+                attempts = 0
+                while not placed and attempts < 10:
+                    x = random.randint(5, self.map.width - 5)
+                    y = random.randint(5, self.map.height - 5)
+                    placed = self.map.place_enemy(enemy, x, y)
+                    attempts += 1
 
     def get_current_enemy(self):
         """Get the enemy at the player's location."""
@@ -228,12 +316,28 @@ class GameState:
         elif action == 5:  # Defend
             enemy.defending = True
             enemy.last_action = 5
+        
+        # Reward action if enemy can see the player
+        if self._can_enemy_see_player(enemy):
+            enemy.reward_action_for_seeing_player()
 
     def _is_adjacent(self, entity1, entity2):
         """Check if two entities are adjacent."""
         dx = abs(entity1.position["x"] - entity2.position["x"])
         dy = abs(entity1.position["y"] - entity2.position["y"])
         return dx + dy == 1
+
+    def _can_enemy_see_player(self, enemy):
+        """Check if an enemy can see the player based on view distance."""
+        ex = enemy.position["x"]
+        ey = enemy.position["y"]
+        px = self.player.position["x"]
+        py = self.player.position["y"]
+        
+        # Calculate distance between enemy and player
+        distance = abs(ex - px) + abs(ey - py)  # Manhattan distance
+        
+        return distance <= enemy.view_distance
 
     def check_game_over(self):
         """Check win/loss conditions."""

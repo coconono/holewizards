@@ -293,6 +293,7 @@ Hole Wizards is a text-based dungeon crawling game with:
 - Decreases by 1 for the last-used action when enemy takes damage
 - Increases by 1 for the last-used action when enemy heals
 - Increases by 2 for the last-used action when enemy deals damage
+- Increases by 1 for the last-used action while seeing a player (within view distance)
 - Movement actions never decrease below 3 (prevents enemies from getting stuck)
 
 ---

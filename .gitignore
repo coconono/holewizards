@@ -12,3 +12,35 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+
+# macOS generated files
+.DS_Store
+.AppleDouble
+.LSOverride
+*.swp
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# OS temporary files
+*.tmp
+*.bak
+.temp/

@@ -5,6 +5,7 @@ import os
 import sys
 import warnings
 from configparser import ConfigParser
+from pathlib import Path
 
 # Suppress pygame.font circular import warnings
 warnings.filterwarnings('ignore', category=RuntimeWarning, module='pygame.font')
@@ -151,20 +152,20 @@ class GraphicalUI:
             
             if font_path and os.path.exists(font_path):
                 try:
-                    fonts['small'] = pygame.freetype.Font(font_path, size=14)
-                    fonts['normal'] = pygame.freetype.Font(font_path, size=18)
-                    fonts['title'] = pygame.freetype.Font(font_path, size=24)
-                    fonts['large'] = pygame.freetype.Font(font_path, size=32)
+                    fonts['small'] = pygame.freetype.Font(font_path, size=18)
+                    fonts['normal'] = pygame.freetype.Font(font_path, size=24)
+                    fonts['title'] = pygame.freetype.Font(font_path, size=32)
+                    fonts['large'] = pygame.freetype.Font(font_path, size=40)
                     return fonts
                 except Exception:
                     pass  # Fall through to system font
             
             # Try system font with freetype
             try:
-                fonts['small'] = pygame.freetype.Font(None, size=14)
-                fonts['normal'] = pygame.freetype.Font(None, size=18)
-                fonts['title'] = pygame.freetype.Font(None, size=24)
-                fonts['large'] = pygame.freetype.Font(None, size=32)
+                fonts['small'] = pygame.freetype.Font(None, size=18)
+                fonts['normal'] = pygame.freetype.Font(None, size=24)
+                fonts['title'] = pygame.freetype.Font(None, size=32)
+                fonts['large'] = pygame.freetype.Font(None, size=40)
                 return fonts
             except Exception:
                 pass  # Fall through to pygame.font
@@ -173,10 +174,10 @@ class GraphicalUI:
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore', RuntimeWarning)
-                fonts['small'] = pygame.font.Font(None, 14)
-                fonts['normal'] = pygame.font.Font(None, 18)
-                fonts['title'] = pygame.font.Font(None, 24)
-                fonts['large'] = pygame.font.Font(None, 32)
+                fonts['small'] = pygame.font.Font(None, 18)
+                fonts['normal'] = pygame.font.Font(None, 24)
+                fonts['title'] = pygame.font.Font(None, 32)
+                fonts['large'] = pygame.font.Font(None, 40)
             return fonts
         except Exception:
             pass  # All font methods failed
@@ -214,14 +215,14 @@ class GraphicalUI:
         # Colors
         self.BLACK = (0, 0, 0)
         self.WHITE = (255, 255, 255)
-        self.DARK_GRAY = (50, 50, 50)
-        self.LIGHT_GRAY = (200, 200, 200)
-        self.DARK_GREEN = (0, 100, 0)
-        self.BRIGHT_GREEN = (0, 255, 0)
-        self.RED = (200, 0, 0)
-        self.YELLOW = (255, 255, 0)
-        self.CYAN = (0, 255, 255)
-        self.ORANGE = (255, 165, 0)
+        self.DARK_GRAY = (40, 40, 40)
+        self.LIGHT_GRAY = (220, 220, 220)
+        self.DARK_GREEN = (0, 120, 0)
+        self.BRIGHT_GREEN = (100, 255, 100)
+        self.RED = (255, 80, 80)
+        self.YELLOW = (255, 255, 100)
+        self.CYAN = (100, 255, 255)
+        self.ORANGE = (255, 200, 100)
         
         # Layout constants
         self.map_x = 20
@@ -241,6 +242,7 @@ class GraphicalUI:
         self.log_messages = []
         self.max_log_lines = 15
         self.showing_full_screen = None  # "help", "legend", or None
+        self.full_screen_text = None  # Text to display for help/legend
 
     def add_log_message(self, message):
         """Add a message to the game log."""
@@ -275,7 +277,7 @@ class GraphicalUI:
         if not text:
             return None
         
-        pixel_size = 3 * scale
+        pixel_size = 4 * scale
         char_width = (5 * pixel_size) + 2
         char_height = (5 * pixel_size) + 2
         surface_width = len(text) * char_width
@@ -455,12 +457,12 @@ class GraphicalUI:
         
         # Map content - calculate max lines to fill entire window
         lines = map_display.split("\n")
-        line_height = 16  # Pixels per line
+        line_height = 24  # Pixels per line (22 char height + 2 padding)
         available_height = self.map_height - 20  # Account for padding
         max_lines = available_height // line_height
         
         # Calculate character width for alignment
-        pixel_size = 3
+        pixel_size = 4
         char_width = (5 * pixel_size) + 2
         available_width = self.map_width - 20  # Account for padding
         max_chars_per_line = available_width // char_width
@@ -528,7 +530,7 @@ class GraphicalUI:
                             self.screen.blit(text, (self.stats_x + 10, y_offset))
                     else:
                         self.draw_simple_text(line, self.stats_x + 10, y_offset, color, scale=0.7)
-                y_offset += 14
+                y_offset += 16
         
         elif page == "enemy" and enemy:
             stats_text = [
@@ -547,7 +549,7 @@ class GraphicalUI:
                         self.screen.blit(text, (self.stats_x + 10, y_offset))
                 else:
                     self.draw_simple_text(line, self.stats_x + 10, y_offset, color, scale=0.7)
-                y_offset += 14
+                y_offset += 16
 
     def render_log_display(self):
         """Render the game log."""
@@ -576,7 +578,7 @@ class GraphicalUI:
                         self.screen.blit(text, (self.log_x + 10, y_offset))
                 else:
                     self.draw_simple_text(line, self.log_x + 10, y_offset, self.LIGHT_GRAY)
-                y_offset += 16
+                y_offset += 22
 
     def render_command_input(self):
         """Render the command input area."""
@@ -614,15 +616,31 @@ class GraphicalUI:
         pygame.draw.rect(self.screen, self.DARK_GRAY, (box_x, box_y, box_width, box_height))
         pygame.draw.rect(self.screen, self.BRIGHT_GREEN, (box_x, box_y, box_width, box_height), 3)
         
-        # Text
+        # Text with smaller scale
         y_offset = box_y + 20
+        text_scale = 0.6  # Smaller font for more content
+        line_height = 14  # Adjusted for smaller text
+        
         for line in help_text.split("\n"):
             if line.strip():
-                self.draw_simple_text(line, box_x + 20, y_offset, self.LIGHT_GRAY)
-            y_offset += 20
+                self.draw_simple_text(line, box_x + 20, y_offset, self.LIGHT_GRAY, scale=text_scale)
+            y_offset += line_height
         
         # Instructions
         self.draw_simple_text("Press Enter or ESC to close", box_x + 20, box_y + box_height - 30, self.YELLOW)
+
+    def _get_message_file(self, filename):
+        """Get path to a message file in data/messages/."""
+        # Try multiple possible locations
+        possible_paths = [
+            Path(__file__).parent / "data" / "messages" / filename,
+            Path(__file__).parent.parent / "data" / "messages" / filename,
+            Path.cwd() / "data" / "messages" / filename,
+        ]
+        for path in possible_paths:
+            if path.exists():
+                return str(path)
+        return None
 
     def render_intro_screen(self):
         """Render the intro screen."""
@@ -631,23 +649,34 @@ class GraphicalUI:
         # Title
         self.draw_simple_text("HOLE WIZARDS", self.width // 2 - 150, 50, self.BRIGHT_GREEN)
         
-        # Intro text
-        intro_lines = [
-            "You have entered the Hole!",
-            "A place of terror and riches!",
-            "You are a wizard!",
-            "",
-            "Other wizards block your exit.",
-            "Beat them up, take their stuff!",
-            "ESCAPE THE HOLE!",
-            "",
-            "Controls:",
-            "move up/down/left/right",
-            "attack, defend",
-            "take/drop/equip/use",
-            "show player",
-            "quit, restart",
-        ]
+        # Load intro text from file
+        intro_lines = []
+        intro_msg_path = self._get_message_file("intro.msg")
+        if intro_msg_path:
+            try:
+                with open(intro_msg_path, 'r') as f:
+                    intro_lines = f.read().strip().split("\n")
+            except:
+                pass
+        
+        # Fallback intro text if file not found
+        if not intro_lines:
+            intro_lines = [
+                "You have entered the Hole!",
+                "A place of terror and riches!",
+                "You are a wizard!",
+                "",
+                "Other wizards block your exit.",
+                "Beat them up, take their stuff!",
+                "ESCAPE THE HOLE!",
+                "",
+                "Controls:",
+                "move up/down/left/right",
+                "attack, defend",
+                "take/drop/equip/use",
+                "show player",
+                "quit, restart",
+            ]
         
         y_offset = 150
         for line in intro_lines:
@@ -680,11 +709,16 @@ class GraphicalUI:
         self.draw_simple_text("VICTORY!", self.width // 2 - 120, 50, self.BRIGHT_GREEN)
         
         # Load and display victory message
-        try:
-            msg_path = os.path.join(os.path.dirname(__file__), "data", "messages", "victory.msg")
-            with open(msg_path, 'r') as f:
-                victory_msg = f.read().strip()
-        except:
+        victory_msg = None
+        victory_msg_path = self._get_message_file("victory.msg")
+        if victory_msg_path:
+            try:
+                with open(victory_msg_path, 'r') as f:
+                    victory_msg = f.read().strip()
+            except:
+                pass
+        
+        if not victory_msg:
             victory_msg = "You have escaped the Hole with your life!\nThe other wizards have fallen and their treasures are yours!"
         
         # Display message
@@ -695,7 +729,7 @@ class GraphicalUI:
             y_offset += 40
         
         # Instructions
-        self.draw_simple_text("Press Enter to continue...", self.width // 2 - 250, self.height - 80, self.YELLOW)
+        self.draw_simple_text("Press Enter to continue... Q/ESC to quit", self.width // 2 - 350, self.height - 80, self.YELLOW)
         
         pygame.display.flip()
         
@@ -704,12 +738,14 @@ class GraphicalUI:
         while waiting:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    return False
+                    return "quit"
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_RETURN:
                         waiting = False
+                    elif event.key == pygame.K_q or event.key == pygame.K_ESCAPE:
+                        return "quit"
         
-        return True
+        return "continue"
 
     def render_defeat_screen(self):
         """Render the defeat screen."""
@@ -719,11 +755,16 @@ class GraphicalUI:
         self.draw_simple_text("DEFEAT!", self.width // 2 - 120, 50, self.RED)
         
         # Load and display defeat message
-        try:
-            msg_path = os.path.join(os.path.dirname(__file__), "data", "messages", "defeat.msg")
-            with open(msg_path, 'r') as f:
-                defeat_msg = f.read().strip()
-        except:
+        defeat_msg = None
+        defeat_msg_path = self._get_message_file("defeat.msg")
+        if defeat_msg_path:
+            try:
+                with open(defeat_msg_path, 'r') as f:
+                    defeat_msg = f.read().strip()
+            except:
+                pass
+        
+        if not defeat_msg:
             defeat_msg = "You have fallen in the Hole.\nYour adventure has ended..."
         
         # Display message
@@ -734,7 +775,7 @@ class GraphicalUI:
             y_offset += 40
         
         # Instructions
-        self.draw_simple_text("Press Enter to continue...", self.width // 2 - 250, self.height - 80, self.YELLOW)
+        self.draw_simple_text("Press Enter to continue... Q/ESC to quit", self.width // 2 - 350, self.height - 80, self.YELLOW)
         
         pygame.display.flip()
         
@@ -743,12 +784,14 @@ class GraphicalUI:
         while waiting:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    return False
+                    return "quit"
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_RETURN:
                         waiting = False
+                    elif event.key == pygame.K_q or event.key == pygame.K_ESCAPE:
+                        return "quit"
         
-        return True
+        return "continue"
 
     def render(self, player, enemy, map_display, page="player"):
         """Render the complete game screen."""
@@ -756,12 +799,10 @@ class GraphicalUI:
         
         # Always render game content
         # Check if showing full screen
-        if self.showing_full_screen == "help":
-            # This would be set by the game and we'd render help
-            pass
-        elif self.showing_full_screen == "legend":
-            # This would be set by the game and we'd render legend
-            pass
+        if self.showing_full_screen in ["help", "legend"]:
+            # Render help or legend screen
+            if self.full_screen_text:
+                self.render_help_screen(self.full_screen_text)
         else:
             # Normal game view - always render content
             self.render_map_display(map_display)

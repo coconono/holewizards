@@ -3,6 +3,7 @@
 
 import sys
 import os
+from pathlib import Path
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -58,17 +59,17 @@ class Game:
         """Render the current game state."""
         if self.use_graphics:
             # Graphical rendering
-            current_enemy = self.state.get_current_enemy()
+            enemy_to_display = self.state.current_enemy if self.state.current_stats_page == "enemy" else self.state.get_current_enemy()
             map_display = self.state.map.get_visible_map(self.state.player, x_distance=49, y_distance=6)
-            self.ui.render(self.state.player, current_enemy, map_display, self.state.current_stats_page)
+            self.ui.render(self.state.player, enemy_to_display, map_display, self.state.current_stats_page)
             self.ui.tick()
         else:
             # Text rendering
             os.system("clear" if os.name == "posix" else "cls")
-            current_enemy = self.state.get_current_enemy()
+            enemy_to_display = self.state.current_enemy if self.state.current_stats_page == "enemy" else self.state.get_current_enemy()
             screen = self.text_ui.render_full_screen(
                 self.state.player,
-                current_enemy,
+                enemy_to_display,
                 self.state.map,
                 self.state.current_stats_page,
                 self.state.chest_items
@@ -87,11 +88,13 @@ class Game:
         # Stats commands
         if cmd_type == "show_player_stats":
             self.state.current_stats_page = "player"
+            self.state.current_enemy = None
             self.ui.add_log_message("Showing player stats")
 
         elif cmd_type == "show_enemy_stats":
-            enemy = self.state.get_current_enemy()
-            if enemy and enemy.alive:
+            enemy = self.state.get_adjacent_enemy()
+            if enemy:
+                self.state.current_enemy = enemy  # Store for display
                 self.state.current_stats_page = "enemy"
                 self.ui.add_log_message(f"Showing {enemy.name}'s stats")
             else:
@@ -99,10 +102,11 @@ class Game:
 
         elif cmd_type == "show_player_inventory":
             self.state.current_stats_page = "player_inventory"
+            self.state.current_enemy = None
             self.ui.add_log_message(f"Showing inventory ({len(self.state.player.inventory)} items)")
 
         elif cmd_type == "show_enemy_inventory":
-            enemy = self.state.get_current_enemy()
+            enemy = self.state.current_enemy if self.state.current_enemy else self.state.get_adjacent_enemy()
             if enemy and not enemy.alive:
                 self.state.current_stats_page = "enemy_inventory"
                 self.ui.add_log_message(f"Showing {enemy.name}'s inventory")
@@ -257,25 +261,51 @@ class Game:
             else:
                 self.ui.add_log_message("Use what?")
 
+    def _get_message_file(self, filename):
+        """Get path to a message file in data/messages/."""
+        # Try multiple possible locations
+        possible_paths = [
+            Path(__file__).parent / "data" / "messages" / filename,
+            Path(__file__).parent.parent / "data" / "messages" / filename,
+            Path.cwd() / "data" / "messages" / filename,
+        ]
+        for path in possible_paths:
+            if path.exists():
+                return str(path)
+        return None
+
     def show_intro(self):
         """Show the game intro."""
         if self.use_graphics:
             self.ui.render_intro_screen()
         else:
             os.system("clear" if os.name == "posix" else "cls")
-            intro_text = """
+            
+            # Try to load intro text from file
+            intro_text = None
+            intro_msg_path = self._get_message_file("intro.msg")
+            if intro_msg_path:
+                try:
+                    with open(intro_msg_path, 'r') as f:
+                        intro_text = f.read().strip()
+                except:
+                    pass
+            
+            # Fallback intro text
+            if not intro_text:
+                intro_text = """
 ╔═══════════════════════════════════════════════════════════════════════╗
 ║                     WELCOME TO HOLE WIZARDS                           ║
 ║                                                                       ║
-║  You have entered the Hole! A place of undescribable terror and      ║
-║  riches! You are a wizard! Cast your spells and swing your sword!    ║
+║  You have entered the Hole! A place of undescribable terror and       ║
+║  riches! You are a wizard! Cast your spells and swing your sword!     ║
 ║                                                                       ║
-║  There are other wizards between you and the exit. They don't like   ║
-║  you! Beat them up, take their stuff and ESCAPE THE HOLE!            ║
+║  There are other wizards between you and the exit. They don't like    ║
+║  you! Beat them up, take their stuff and ESCAPE THE HOLE!             ║
 ║                                                                       ║
-║  Commands: move up/down/left/right, attack, defend, take [item],    ║
-║           drop [item], equip [item], use [item],                     ║
-║           show player stats, list commands                           ║
+║  Commands: move up/down/left/right, attack, defend, take [item],      ║
+║           drop [item], equip [item], use [item],                      ║
+║           show player stats, list commands                            ║
 ║                                                                       ║
 ╚═══════════════════════════════════════════════════════════════════════╝
         """
@@ -286,8 +316,8 @@ class Game:
         """Display the help screen."""
         if self.use_graphics:
             help_text = UI().render_help()  # Use text UI to generate help text
+            self.ui.full_screen_text = help_text
             self.ui.showing_full_screen = "help"
-            self.ui.render_help_screen(help_text)
         else:
             os.system("clear" if os.name == "posix" else "cls")
             help_screen = self.text_ui.render_help()
@@ -298,8 +328,8 @@ class Game:
         """Display the legend screen."""
         if self.use_graphics:
             legend_text = UI().render_legend()  # Use text UI to generate legend text
+            self.ui.full_screen_text = legend_text
             self.ui.showing_full_screen = "legend"
-            self.ui.render_help_screen(legend_text)
         else:
             os.system("clear" if os.name == "posix" else "cls")
             legend_screen = self.text_ui.render_legend()
@@ -311,9 +341,13 @@ class Game:
         if self.use_graphics:
             # Show graphics mode victory/defeat screen
             if result == "victory":
-                self.ui.render_victory_screen()
+                screen_result = self.ui.render_victory_screen()
             else:
-                self.ui.render_defeat_screen()
+                screen_result = self.ui.render_defeat_screen()
+            
+            # Return quit signal if user pressed Q/ESC
+            if screen_result == "quit":
+                return "quit"
         else:
             # Text mode
             os.system("clear" if os.name == "posix" else "cls")
@@ -323,10 +357,10 @@ class Game:
 ╔═══════════════════════════════════════════════════════════════════════╗
 ║                         VICTORY!                                      ║
 ║                                                                       ║
-║  You have escaped the Hole with your life (and treasure)!            ║
-║  The other wizards have fallen and their treasures are yours!        ║
+║  You have escaped the Hole with your life (and treasure)!             ║
+║  The other wizards have fallen and their treasures are yours!         ║
 ║                                                                       ║
-║  You emerge from the darkness into the light... a hero!              ║
+║  You emerge from the darkness into the light... a hero!               ║
 ║                                                                       ║
 ╚═══════════════════════════════════════════════════════════════════════╝
                 """
@@ -336,10 +370,10 @@ class Game:
 ╔═══════════════════════════════════════════════════════════════════════╗
 ║                         DEFEAT!                                       ║
 ║                                                                       ║
-║  You have fallen in the Hole. Your adventure has ended...            ║
-║  Perhaps another wizard will be more successful.                     ║
+║  You have fallen in the Hole. Your adventure has ended...             ║
+║  Perhaps another wizard will be more successful.                      ║
 ║                                                                       ║
-║  Your remains will rest in the darkness forever...                   ║
+║  Your remains will rest in the darkness forever...                    ║
 ║                                                                       ║
 ╚═══════════════════════════════════════════════════════════════════════╝
                 """
@@ -359,7 +393,11 @@ class Game:
             # Check win/loss conditions
             result = self.state.check_game_over()
             if result:
-                self.show_game_over(result)
+                game_over_result = self.show_game_over(result)
+                # If user quit from game over screen, exit without restarting
+                if game_over_result == "quit":
+                    self.running = False
+                    self.should_show_intro = False
                 self.running = False
                 break
 

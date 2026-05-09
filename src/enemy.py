@@ -22,7 +22,7 @@ class Enemy:
         self.equipped_spell = None
         self.alive = True
         self.view_distance = 5
-        self.reinforcement = [5] * 10  # Weights for 10 different actions
+        self.reinforcement = [random.randint(1, 10) for _ in range(10)]  # Weights for 10 different actions (1-10)
         self.last_action = None
         self.defending = False
 
@@ -39,6 +39,11 @@ class Enemy:
         """Increase HP up to max."""
         self.hp = min(self.max_hp, self.hp + amount)
         # Increase reinforcement for last action when healing
+        if self.last_action is not None:
+            self.reinforcement[self.last_action] = min(10, self.reinforcement[self.last_action] + 1)
+
+    def reward_action_for_seeing_player(self):
+        """Increase reinforcement for last action when player is in view."""
         if self.last_action is not None:
             self.reinforcement[self.last_action] = min(10, self.reinforcement[self.last_action] + 1)
 
