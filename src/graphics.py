@@ -10,11 +10,18 @@ from pathlib import Path
 # Suppress pygame.font circular import warnings
 warnings.filterwarnings('ignore', category=RuntimeWarning, module='pygame.font')
 
+# Try PIL/Pillow as a font rendering alternative
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+
 # Try to use pygame.freetype for text rendering (bypasses pygame.font issues)
 try:
     import pygame.freetype
     FREETYPE_AVAILABLE = True
-except (ImportError, RuntimeError):
+except (ImportError, RuntimeError) as e:
     FREETYPE_AVAILABLE = False
 
 # Simple text-based character rendering using ASCII art patterns
@@ -128,10 +135,14 @@ class GraphicalUI:
         # Initialize colors and layout BEFORE fonts
         self._init_colors_and_layout()
         
+        # Initialize font renderer type
+        self.font_renderer = 'bitmap'  # Default fallback
+        
         # Initialize fonts (may fail gracefully)
         self.fonts = self._init_fonts()
         
         # Store font references
+        self.font_tiny = self.fonts.get('tiny')
         self.font_small = self.fonts.get('small')
         self.font_normal = self.fonts.get('normal')
         self.font_title = self.fonts.get('title')
@@ -140,55 +151,71 @@ class GraphicalUI:
     def _init_fonts(self):
         """Initialize fonts from data/fonts folder based on settings.cfg."""
         fonts = {
+            'tiny': None,
             'small': None,
             'normal': None,
             'title': None,
             'large': None,
         }
         
-        # Try freetype first (bypasses pygame.font circular import)
-        if FREETYPE_AVAILABLE:
-            font_path = self._get_font_path()
-            
+        # Get font path from settings
+        font_path = self._get_font_path()
+        
+        # Try PIL/Pillow first (most reliable for custom fonts)
+        if PIL_AVAILABLE:
             if font_path and os.path.exists(font_path):
                 try:
-                    fonts['small'] = pygame.freetype.Font(font_path, size=18)
-                    fonts['normal'] = pygame.freetype.Font(font_path, size=24)
-                    fonts['title'] = pygame.freetype.Font(font_path, size=32)
-                    fonts['large'] = pygame.freetype.Font(font_path, size=40)
+                    fonts['tiny'] = ImageFont.truetype(font_path, size=9)
+                    fonts['small'] = ImageFont.truetype(font_path, size=12)
+                    fonts['normal'] = ImageFont.truetype(font_path, size=16)
+                    fonts['title'] = ImageFont.truetype(font_path, size=22)
+                    fonts['large'] = ImageFont.truetype(font_path, size=28)
+                    self.font_renderer = 'PIL'
                     return fonts
                 except Exception:
-                    pass  # Fall through to system font
+                    pass
             
-            # Try system font with freetype
+            # Try system fonts with PIL
             try:
-                fonts['small'] = pygame.freetype.Font(None, size=18)
-                fonts['normal'] = pygame.freetype.Font(None, size=24)
-                fonts['title'] = pygame.freetype.Font(None, size=32)
-                fonts['large'] = pygame.freetype.Font(None, size=40)
+                fonts['small'] = ImageFont.load_default()
+                fonts['normal'] = ImageFont.load_default()
+                fonts['title'] = ImageFont.load_default()
+                fonts['large'] = ImageFont.load_default()
+                self.font_renderer = 'PIL'
                 return fonts
             except Exception:
-                pass  # Fall through to pygame.font
+                pass
         
-        # Fallback to pygame.font
+        # Try pygame font (may fail due to circular imports)
         try:
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore', RuntimeWarning)
-                fonts['small'] = pygame.font.Font(None, 18)
-                fonts['normal'] = pygame.font.Font(None, 24)
-                fonts['title'] = pygame.font.Font(None, 32)
-                fonts['large'] = pygame.font.Font(None, 40)
+            from pygame.font import Font as PygameFont
+            if font_path and os.path.exists(font_path):
+                fonts['tiny'] = PygameFont(font_path, 9)
+                fonts['small'] = PygameFont(font_path, 12)
+                fonts['normal'] = PygameFont(font_path, 16)
+                fonts['title'] = PygameFont(font_path, 22)
+                fonts['large'] = PygameFont(font_path, 28)
+            else:
+                fonts['tiny'] = PygameFont(None, 9)
+                fonts['small'] = PygameFont(None, 12)
+                fonts['normal'] = PygameFont(None, 16)
+                fonts['title'] = PygameFont(None, 22)
+                fonts['large'] = PygameFont(None, 28)
+            self.font_renderer = 'pygame'
             return fonts
         except Exception:
-            pass  # All font methods failed
+            pass
         
         # If all fails, fonts stay None and we'll use fallback rendering
+        self.font_renderer = 'bitmap'
         return fonts
     
     def _get_font_path(self):
         """Load font path from settings.cfg or return None for default."""
         try:
-            settings_path = os.path.join(os.path.dirname(__file__), 'data', 'settings.cfg')
+            # Get project root (parent of src directory)
+            project_root = os.path.dirname(os.path.dirname(__file__))
+            settings_path = os.path.join(project_root, 'data', 'settings.cfg')
             
             if not os.path.exists(settings_path):
                 return None
@@ -203,10 +230,10 @@ class GraphicalUI:
                     return None
                 
                 # Construct path to font file
-                font_path = os.path.join(os.path.dirname(__file__), 'data', 'fonts', font_name)
+                font_path = os.path.join(project_root, 'data', 'fonts', font_name)
                 return font_path
         except Exception as e:
-            print(f"Error reading settings.cfg: {e}")
+            pass
         
         return None
         
@@ -222,6 +249,7 @@ class GraphicalUI:
         self.RED = (255, 80, 80)
         self.YELLOW = (255, 255, 100)
         self.CYAN = (100, 255, 255)
+        self.MAGENTA = (255, 100, 255)
         self.ORANGE = (255, 200, 100)
         
         # Layout constants
@@ -255,21 +283,40 @@ class GraphicalUI:
         self.log_messages = []
 
     def render_text(self, text, font, color):
-        """Safely render text, handling font initialization failures."""
+        """Safely render text, handling different font types (pygame, PIL, None)."""
         if font is None:
             return None
         
         try:
+            # Handle PIL fonts
+            if PIL_AVAILABLE and hasattr(font, 'getbbox'):
+                # This is a PIL font - render using PIL
+                # Get approximate text size
+                bbox = font.getbbox(text)
+                width = bbox[2] - bbox[0] + 2
+                height = bbox[3] - bbox[1] + 2
+                
+                # Create PIL image with transparent background
+                pil_img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(pil_img)
+                draw.text((0, 0), text, font=font, fill=color + (255,))  # Add alpha channel
+                
+                # Convert PIL image to pygame surface
+                pil_str = pil_img.tobytes()
+                surf = pygame.image.fromstring(pil_str, pil_img.size, "RGBA")
+                return surf
+            
             # Handle pygame.freetype.Font
-            if FREETYPE_AVAILABLE and isinstance(font, pygame.freetype.Font):
+            elif FREETYPE_AVAILABLE and isinstance(font, pygame.freetype.Font):
                 surface, rect = font.render(text, fgcolor=color)
                 return surface
+            
             # Handle pygame.font.Font
             elif hasattr(font, 'render'):
                 return font.render(text, True, color)
             else:
                 return None
-        except Exception as e:
+        except Exception:
             return None
     
     def render_bitmap_text(self, text, scale=1, color=(255, 255, 255)):
@@ -448,8 +495,8 @@ class GraphicalUI:
                         (self.map_x, self.map_y, self.map_width, self.map_height), 2)
         
         # Map title
-        if self.font_title:
-            title = self.render_text("MAP", self.font_title, self.WHITE)
+        if self.font_normal:
+            title = self.render_text("MAP", self.font_normal, self.WHITE)
             if title:
                 self.screen.blit(title, (self.map_x + 10, self.map_y - 25))
         else:
@@ -481,13 +528,60 @@ class GraphicalUI:
                 # Left-align normally
                 x_offset = self.map_x + 10
             
-            if self.font_small:
-                text = self.render_text(line, self.font_small, self.BRIGHT_GREEN)
-                if text:
-                    self.screen.blit(text, (x_offset, y_offset))
-            else:
-                self.draw_simple_text(line, x_offset, y_offset, self.BRIGHT_GREEN)
+            # Render the map line with special character handling
+            self.render_map_line(line, x_offset, y_offset)
             y_offset += line_height
+
+    def render_map_line(self, line, x_pos, y_pos):
+        """Render a single line of the map, handling special characters."""
+        # Special tile characters that need visual rendering
+        special_chars = {
+            '█': self.DARK_GRAY,  # Wall - gray
+            '◆': self.YELLOW,     # Item/bag - yellow
+            '▪': self.YELLOW,     # Consumable - yellow
+            '╬': self.CYAN,       # Closed door - cyan
+            '─': self.BRIGHT_GREEN,  # Open door - green
+            'E': self.ORANGE,     # Entrance - orange
+            'X': self.MAGENTA,    # Exit - magenta
+            'p': self.BRIGHT_GREEN,  # Player - bright green
+            'm': self.RED,        # Monster - red
+            '?': self.LIGHT_GRAY, # Unknown - gray
+        }
+        
+        # Characters that should display their letter inside the box
+        chars_with_labels = {'E', 'X'}
+        
+        x_offset = x_pos
+        for char in line:
+            if char in special_chars:
+                # Render special character as a colored box/shape
+                color = special_chars[char]
+                # Draw a filled square for the character
+                pygame.draw.rect(self.screen, color, 
+                               (x_offset, y_pos, 16, 18))
+                # Draw border
+                pygame.draw.rect(self.screen, self.WHITE, 
+                               (x_offset, y_pos, 16, 18), 1)
+                
+                # Draw letter inside the box for E and X
+                if char in chars_with_labels and self.font_small:
+                    text = self.render_text(char, self.font_small, self.WHITE)
+                    if text:
+                        # Center the text inside the box
+                        text_x = x_offset + (16 - text.get_width()) // 2
+                        text_y = y_pos + (18 - text.get_height()) // 2
+                        self.screen.blit(text, (text_x, text_y))
+            else:
+                # Render normal character with the font
+                if self.font_small:
+                    text = self.render_text(char, self.font_small, self.BRIGHT_GREEN)
+                    if text:
+                        self.screen.blit(text, (x_offset, y_pos))
+                else:
+                    # Fallback: don't render
+                    pass
+            
+            x_offset += 18  # Move to next character position
 
     def render_stats_display(self, player, enemy, page="player"):
         """Render stats in the stats area."""
@@ -498,8 +592,8 @@ class GraphicalUI:
                         (self.stats_x, self.stats_y, self.stats_width, self.stats_height), 2)
         
         # Stats title
-        if self.font_title:
-            title = self.render_text("STATS", self.font_title, self.WHITE)
+        if self.font_normal:
+            title = self.render_text("STATS", self.font_normal, self.WHITE)
             if title:
                 self.screen.blit(title, (self.stats_x + 10, self.stats_y - 25))
         else:
@@ -560,8 +654,8 @@ class GraphicalUI:
                         (self.log_x, self.log_y, self.log_width, self.log_height), 2)
         
         # Log title
-        if self.font_title:
-            title = self.render_text("LOG", self.font_title, self.WHITE)
+        if self.font_normal:
+            title = self.render_text("LOG", self.font_normal, self.WHITE)
             if title:
                 self.screen.blit(title, (self.log_x + 10, self.log_y - 25))
         else:
@@ -616,18 +710,68 @@ class GraphicalUI:
         pygame.draw.rect(self.screen, self.DARK_GRAY, (box_x, box_y, box_width, box_height))
         pygame.draw.rect(self.screen, self.BRIGHT_GREEN, (box_x, box_y, box_width, box_height), 3)
         
-        # Text with smaller scale
+        # Special characters mapping for legend display
+        special_chars = {
+            '█': self.DARK_GRAY,      # Wall - gray
+            '◆': self.YELLOW,         # Item - yellow
+            '▪': self.YELLOW,         # Consumable - yellow
+            '╬': self.CYAN,           # Closed door - cyan
+            '─': self.BRIGHT_GREEN,   # Open door - green
+            '?': self.LIGHT_GRAY,     # Unknown - gray (white box)
+        }
+        
+        # Text using small font - readable and compact
         y_offset = box_y + 20
-        text_scale = 0.6  # Smaller font for more content
-        line_height = 14  # Adjusted for smaller text
+        line_height = 16
         
         for line in help_text.split("\n"):
             if line.strip():
-                self.draw_simple_text(line, box_x + 20, y_offset, self.LIGHT_GRAY, scale=text_scale)
+                # Render line with special character handling
+                self._render_legend_line(line, box_x + 20, y_offset, special_chars)
             y_offset += line_height
         
-        # Instructions
-        self.draw_simple_text("Press Enter or ESC to close", box_x + 20, box_y + box_height - 30, self.YELLOW)
+        # Instructions using normal font
+        if self.font_normal:
+            instr = self.render_text("Press Enter or ESC to close", self.font_normal, self.YELLOW)
+            if instr:
+                self.screen.blit(instr, (box_x + 20, box_y + box_height - 30))
+        else:
+            self.draw_simple_text("Press Enter or ESC to close", box_x + 20, box_y + box_height - 30, self.YELLOW)
+
+    def _render_legend_line(self, line, x_pos, y_pos, special_chars):
+        """Render a line from legend, handling special characters as colored boxes."""
+        x_offset = x_pos
+        i = 0
+        
+        while i < len(line):
+            char = line[i]
+            
+            if char in special_chars:
+                # Draw colored box for special character
+                color = special_chars[char]
+                pygame.draw.rect(self.screen, color, (x_offset, y_pos, 14, 14))
+                pygame.draw.rect(self.screen, self.WHITE, (x_offset, y_pos, 14, 14), 1)
+                x_offset += 16
+                i += 1
+            elif char == ' ':
+                x_offset += 8
+                i += 1
+            else:
+                # Render normal text - find the next special character or end
+                text_chunk = ""
+                while i < len(line) and line[i] not in special_chars and line[i] != ' ':
+                    text_chunk += line[i]
+                    i += 1
+                
+                if text_chunk:
+                    if self.font_small:
+                        text = self.render_text(text_chunk, self.font_small, self.LIGHT_GRAY)
+                        if text:
+                            self.screen.blit(text, (x_offset, y_pos))
+                            x_offset += text.get_width() + 2
+                    else:
+                        self.draw_simple_text(text_chunk, x_offset, y_pos, self.LIGHT_GRAY, scale=0.7)
+                        x_offset += len(text_chunk) * 8
 
     def _get_message_file(self, filename):
         """Get path to a message file in data/messages/."""
@@ -646,8 +790,13 @@ class GraphicalUI:
         """Render the intro screen."""
         self.screen.fill(self.BLACK)
         
-        # Title
-        self.draw_simple_text("HOLE WIZARDS", self.width // 2 - 150, 50, self.BRIGHT_GREEN)
+        # Title - use title font if available
+        if self.font_title:
+            title = self.render_text("HOLE WIZARDS", self.font_title, self.BRIGHT_GREEN)
+            if title:
+                self.screen.blit(title, (self.width // 2 - 150, 50))
+        else:
+            self.draw_simple_text("HOLE WIZARDS", self.width // 2 - 150, 50, self.BRIGHT_GREEN)
         
         # Load intro text from file
         intro_lines = []
@@ -681,11 +830,26 @@ class GraphicalUI:
         y_offset = 150
         for line in intro_lines:
             if line:
-                self.draw_simple_text(line, 100, y_offset, self.LIGHT_GRAY)
+                # Use normal font if available, otherwise fallback to simple text
+                if self.font_normal:
+                    text_surface = self.render_text(line, self.font_normal, self.LIGHT_GRAY)
+                    if text_surface:
+                        self.screen.blit(text_surface, (100, y_offset))
+                    else:
+                        self.draw_simple_text(line, 100, y_offset, self.LIGHT_GRAY)
+                else:
+                    self.draw_simple_text(line, 100, y_offset, self.LIGHT_GRAY)
             y_offset += 30
         
-        # Instructions
-        self.draw_simple_text("Press Enter to begin...", self.width // 2 - 200, self.height - 80, self.YELLOW)
+        # Instructions - use normal font if available
+        if self.font_normal:
+            instr = self.render_text("Press Enter to begin...", self.font_normal, self.YELLOW)
+            if instr:
+                self.screen.blit(instr, (self.width // 2 - 200, self.height - 80))
+            else:
+                self.draw_simple_text("Press Enter to begin...", self.width // 2 - 200, self.height - 80, self.YELLOW)
+        else:
+            self.draw_simple_text("Press Enter to begin...", self.width // 2 - 200, self.height - 80, self.YELLOW)
         
         pygame.display.flip()
         
@@ -705,8 +869,13 @@ class GraphicalUI:
         """Render the victory screen."""
         self.screen.fill(self.BLACK)
         
-        # Title
-        self.draw_simple_text("VICTORY!", self.width // 2 - 120, 50, self.BRIGHT_GREEN)
+        # Title - use title font if available
+        if self.font_title:
+            title = self.render_text("VICTORY!", self.font_title, self.BRIGHT_GREEN)
+            if title:
+                self.screen.blit(title, (self.width // 2 - 120, 50))
+        else:
+            self.draw_simple_text("VICTORY!", self.width // 2 - 120, 50, self.BRIGHT_GREEN)
         
         # Load and display victory message
         victory_msg = None
@@ -721,15 +890,29 @@ class GraphicalUI:
         if not victory_msg:
             victory_msg = "You have escaped the Hole with your life!\nThe other wizards have fallen and their treasures are yours!"
         
-        # Display message
+        # Display message - use normal font if available
         y_offset = 150
         for line in victory_msg.split("\n"):
             if line.strip():
-                self.draw_simple_text(line, 100, y_offset, self.LIGHT_GRAY, scale=0.8)
+                if self.font_normal:
+                    text_surface = self.render_text(line, self.font_normal, self.LIGHT_GRAY)
+                    if text_surface:
+                        self.screen.blit(text_surface, (100, y_offset))
+                    else:
+                        self.draw_simple_text(line, 100, y_offset, self.LIGHT_GRAY, scale=0.8)
+                else:
+                    self.draw_simple_text(line, 100, y_offset, self.LIGHT_GRAY, scale=0.8)
             y_offset += 40
         
-        # Instructions
-        self.draw_simple_text("Press Enter to continue... Q/ESC to quit", self.width // 2 - 350, self.height - 80, self.YELLOW)
+        # Instructions - use normal font if available
+        if self.font_normal:
+            instr = self.render_text("Press Enter to continue... Q/ESC to quit", self.font_normal, self.YELLOW)
+            if instr:
+                self.screen.blit(instr, (self.width // 2 - 350, self.height - 80))
+            else:
+                self.draw_simple_text("Press Enter to continue... Q/ESC to quit", self.width // 2 - 350, self.height - 80, self.YELLOW)
+        else:
+            self.draw_simple_text("Press Enter to continue... Q/ESC to quit", self.width // 2 - 350, self.height - 80, self.YELLOW)
         
         pygame.display.flip()
         
@@ -751,8 +934,13 @@ class GraphicalUI:
         """Render the defeat screen."""
         self.screen.fill(self.BLACK)
         
-        # Title
-        self.draw_simple_text("DEFEAT!", self.width // 2 - 120, 50, self.RED)
+        # Title - use title font if available
+        if self.font_title:
+            title = self.render_text("DEFEAT!", self.font_title, self.RED)
+            if title:
+                self.screen.blit(title, (self.width // 2 - 120, 50))
+        else:
+            self.draw_simple_text("DEFEAT!", self.width // 2 - 120, 50, self.RED)
         
         # Load and display defeat message
         defeat_msg = None
@@ -767,15 +955,29 @@ class GraphicalUI:
         if not defeat_msg:
             defeat_msg = "You have fallen in the Hole.\nYour adventure has ended..."
         
-        # Display message
+        # Display message - use normal font if available
         y_offset = 150
         for line in defeat_msg.split("\n"):
             if line.strip():
-                self.draw_simple_text(line, 100, y_offset, self.LIGHT_GRAY, scale=0.8)
+                if self.font_normal:
+                    text_surface = self.render_text(line, self.font_normal, self.LIGHT_GRAY)
+                    if text_surface:
+                        self.screen.blit(text_surface, (100, y_offset))
+                    else:
+                        self.draw_simple_text(line, 100, y_offset, self.LIGHT_GRAY, scale=0.8)
+                else:
+                    self.draw_simple_text(line, 100, y_offset, self.LIGHT_GRAY, scale=0.8)
             y_offset += 40
         
-        # Instructions
-        self.draw_simple_text("Press Enter to continue... Q/ESC to quit", self.width // 2 - 350, self.height - 80, self.YELLOW)
+        # Instructions - use normal font if available
+        if self.font_normal:
+            instr = self.render_text("Press Enter to continue... Q/ESC to quit", self.font_normal, self.YELLOW)
+            if instr:
+                self.screen.blit(instr, (self.width // 2 - 350, self.height - 80))
+            else:
+                self.draw_simple_text("Press Enter to continue... Q/ESC to quit", self.width // 2 - 350, self.height - 80, self.YELLOW)
+        else:
+            self.draw_simple_text("Press Enter to continue... Q/ESC to quit", self.width // 2 - 350, self.height - 80, self.YELLOW)
         
         pygame.display.flip()
         

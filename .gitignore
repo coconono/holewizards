@@ -44,3 +44,4 @@ Desktop.ini
 *.tmp
 *.bak
 .temp/
+.DS_Store

@@ -86,6 +86,9 @@ class Map:
         exit_x = self.width - 3
         exit_y = self.height - 3
         self.tiles[exit_y][exit_x].tile_type = "exit"
+        
+        # Add exit to initial player view so it's always visible
+        self.player_view.add((exit_x, exit_y))
 
     def is_valid_position(self, x, y):
         """Check if position is within map bounds."""
@@ -227,10 +230,26 @@ class Map:
         
         px = player.position["x"]
         py = player.position["y"]
+        
+        exit_pos = (self.width - 3, self.height - 3)
+        entrance_pos = (2, 2)
+        
+        # Determine display bounds, expanding to include important tiles if explored
+        min_x = max(0, px - x_distance)
+        max_x = min(self.width, px + x_distance + 1)
+        min_y = max(0, py - y_distance)
+        max_y = min(self.height, py + y_distance + 1)
+        
+        # Expand bounds to include exit and entrance if explored
+        if exit_pos in self.player_view:
+            min_x = min(min_x, exit_pos[0])
+            max_x = max(max_x, exit_pos[0] + 1)
+            min_y = min(min_y, exit_pos[1])
+            max_y = max(max_y, exit_pos[1] + 1)
 
-        for y in range(max(0, py - y_distance), min(self.height, py + y_distance + 1)):
+        for y in range(min_y, max_y):
             row = []
-            for x in range(max(0, px - x_distance), min(self.width, px + x_distance + 1)):
+            for x in range(min_x, max_x):
                 if (x, y) in self.player_view or (x, y) == (px, py):
                     row.append(self.tiles[y][x].get_display_char())
                 else:
