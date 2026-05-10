@@ -9,6 +9,7 @@ from items import (
     create_starting_spell,
     create_hp_potion,
     create_mana_potion,
+    LootBag,
 )
 from pathlib import Path
 import configparser
@@ -276,11 +277,28 @@ class GameState:
         if enemy.alive:
             return True, f"Attacked {enemy.name} for {damage} damage! ({enemy.hp} HP remaining)"
         else:
+            # Collect all items (inventory + equipped items)
+            loot_items = list(enemy.inventory)
+            if enemy.equipped_weapon:
+                loot_items.append(enemy.equipped_weapon)
+            if enemy.equipped_armor:
+                loot_items.append(enemy.equipped_armor)
+            if enemy.equipped_spell:
+                loot_items.append(enemy.equipped_spell)
+            
+            # Create loot bag
+            loot_bag = LootBag(enemy.name, loot_items)
+            
+            # Place loot bag on map at enemy's position
+            enemy_x = enemy.position["x"]
+            enemy_y = enemy.position["y"]
+            self.map.place_item(loot_bag, enemy_x, enemy_y)
+            
             # Remove dead enemy from map
             self.map.remove_enemy(enemy)
             xp_gained = enemy.xp
             self.player.gain_xp(xp_gained)
-            return True, f"Defeated {enemy.name}! Gained {xp_gained} XP!"
+            return True, f"Defeated {enemy.name}! Gained {xp_gained} XP! Loot dropped."
 
     def player_defend(self):
         """Have the player prepare to defend."""

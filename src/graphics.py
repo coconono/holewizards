@@ -633,17 +633,88 @@ class GraphicalUI:
                 f"HP: {enemy.hp}/{enemy.max_hp}",
                 f"Mana: {enemy.mana}/{enemy.max_mana}",
                 f"Pos: ({enemy.position['x']}, {enemy.position['y']})",
+                "",
+                f"Equipped Weapon: {enemy.equipped_weapon or 'None'}",
+                f"Equipped Armor: {enemy.equipped_armor or 'None'}",
+                f"Equipped Spell: {enemy.equipped_spell or 'None'}",
             ]
             
             for line in stats_text:
-                color = self.RED if "HP" in line else self.LIGHT_GRAY
-                if self.font_normal:
-                    text = self.render_text(line, self.font_normal, color)
+                if line:
+                    color = self.RED if "HP" in line else self.LIGHT_GRAY
+                    if self.font_normal:
+                        text = self.render_text(line, self.font_normal, color)
+                        if text:
+                            self.screen.blit(text, (self.stats_x + 10, y_offset))
+                    else:
+                        self.draw_simple_text(line, self.stats_x + 10, y_offset, color, scale=0.7)
+                y_offset += 16
+        
+        elif page == "player_inventory" and player:
+            # Display player inventory
+            title_text = "INVENTORY"
+            if self.font_normal:
+                text = self.render_text(title_text, self.font_normal, self.WHITE)
+                if text:
+                    self.screen.blit(text, (self.stats_x + 10, y_offset))
+            y_offset += 20
+            
+            if player.inventory:
+                for item in player.inventory:
+                    if item.item_type == "weapon":
+                        item_text = f"{item.name} (ATK:{item.get_attack_value()})"
+                    elif item.item_type == "armor":
+                        item_text = f"{item.name} (DEF:{item.get_defense_value()})"
+                    else:
+                        item_text = f"{item.name}"
+                    
+                    if self.font_small:
+                        text = self.render_text(item_text, self.font_small, self.LIGHT_GRAY)
+                        if text:
+                            self.screen.blit(text, (self.stats_x + 10, y_offset))
+                    else:
+                        self.draw_simple_text(item_text, self.stats_x + 10, y_offset, self.LIGHT_GRAY, scale=0.7)
+                    y_offset += 14
+            else:
+                if self.font_small:
+                    text = self.render_text("(empty)", self.font_small, self.DARK_GREEN)
                     if text:
                         self.screen.blit(text, (self.stats_x + 10, y_offset))
                 else:
-                    self.draw_simple_text(line, self.stats_x + 10, y_offset, color, scale=0.7)
-                y_offset += 16
+                    self.draw_simple_text("(empty)", self.stats_x + 10, y_offset, self.DARK_GREEN)
+        
+        elif page == "enemy_inventory" and enemy:
+            # Display enemy inventory
+            title_text = f"{enemy.name}'s INVENTORY"
+            if self.font_normal:
+                text = self.render_text(title_text, self.font_normal, self.WHITE)
+                if text:
+                    self.screen.blit(text, (self.stats_x + 10, y_offset))
+            y_offset += 20
+            
+            if enemy.inventory:
+                for item in enemy.inventory:
+                    if item.item_type == "weapon":
+                        item_text = f"{item.name} (ATK:{item.get_attack_value()})"
+                    elif item.item_type == "armor":
+                        item_text = f"{item.name} (DEF:{item.get_defense_value()})"
+                    else:
+                        item_text = f"{item.name}"
+                    
+                    if self.font_small:
+                        text = self.render_text(item_text, self.font_small, self.LIGHT_GRAY)
+                        if text:
+                            self.screen.blit(text, (self.stats_x + 10, y_offset))
+                    else:
+                        self.draw_simple_text(item_text, self.stats_x + 10, y_offset, self.LIGHT_GRAY, scale=0.7)
+                    y_offset += 14
+            else:
+                if self.font_small:
+                    text = self.render_text("(empty)", self.font_small, self.DARK_GREEN)
+                    if text:
+                        self.screen.blit(text, (self.stats_x + 10, y_offset))
+                else:
+                    self.draw_simple_text("(empty)", self.stats_x + 10, y_offset, self.DARK_GREEN)
 
     def render_log_display(self):
         """Render the game log."""
@@ -701,77 +772,150 @@ class GraphicalUI:
         overlay.fill(self.BLACK)
         self.screen.blit(overlay, (0, 0))
         
-        # Help box
-        box_width = 1000
-        box_height = 700
+        # Help box - sized to fit on screen with padding
+        box_width = min(1000, self.width - 60)  # Leave 60px padding from edges
+        box_height = min(700, self.height - 60)  # Leave 60px padding from edges
         box_x = (self.width - box_width) // 2
         box_y = (self.height - box_height) // 2
         
         pygame.draw.rect(self.screen, self.DARK_GRAY, (box_x, box_y, box_width, box_height))
         pygame.draw.rect(self.screen, self.BRIGHT_GREEN, (box_x, box_y, box_width, box_height), 3)
         
-        # Special characters mapping for legend display
-        special_chars = {
-            '█': self.DARK_GRAY,      # Wall - gray
-            '◆': self.YELLOW,         # Item - yellow
-            '▪': self.YELLOW,         # Consumable - yellow
-            '╬': self.CYAN,           # Closed door - cyan
-            '─': self.BRIGHT_GREEN,   # Open door - green
-            '?': self.LIGHT_GRAY,     # Unknown - gray (white box)
+        # Detect if this is legend (has arrow in non-header lines) or help text
+        is_legend = "→" in help_text and "COMMAND" not in help_text
+        
+        y_offset = box_y + 15
+        line_height = 20 if is_legend else 22  # Help is more compact for two columns
+        max_y = box_y + box_height - 40  # Leave space at bottom for instructions
+        
+        if is_legend:
+            # Legend rendering with icons
+            for line in help_text.split("\n"):
+                if y_offset > max_y:
+                    break
+                
+                line_stripped = line.strip()
+                if line_stripped:
+                    self._render_simple_legend_entry(line_stripped, box_x + 30, y_offset)
+                    y_offset += line_height
+        else:
+            # Help rendering in two columns
+            col1_x = box_x + 20
+            col2_x = box_x + 20 + (box_width // 2)
+            col_width = (box_width // 2) - 40
+            
+            for line in help_text.split("\n"):
+                if y_offset > max_y:
+                    break
+                
+                line_stripped = line.strip()
+                if not line_stripped:  # Skip empty lines but don't increment
+                    continue
+                
+                # Check if this line has command → explanation format
+                if "→" in line_stripped:
+                    parts = line_stripped.split("→", 1)
+                    command = parts[0].strip()
+                    explanation = parts[1].strip() if len(parts) > 1 else ""
+                    
+                    # Render command in left column
+                    if self.font_small:
+                        cmd_text = self.render_text(command, self.font_small, self.BRIGHT_GREEN)
+                        if cmd_text:
+                            self.screen.blit(cmd_text, (col1_x, y_offset))
+                    else:
+                        self.draw_simple_text(command, col1_x, y_offset, self.BRIGHT_GREEN, scale=0.7)
+                    
+                    # Render explanation in right column
+                    if self.font_small:
+                        exp_text = self.render_text(explanation, self.font_small, self.LIGHT_GRAY)
+                        if exp_text:
+                            self.screen.blit(exp_text, (col2_x, y_offset))
+                    else:
+                        self.draw_simple_text(explanation, col2_x, y_offset, self.LIGHT_GRAY, scale=0.7)
+                else:
+                    # Section headers and other text - render full width
+                    if self.font_small:
+                        text = self.render_text(line_stripped, self.font_small, self.LIGHT_GRAY)
+                        if text:
+                            self.screen.blit(text, (col1_x, y_offset))
+                    else:
+                        self.draw_simple_text(line_stripped, col1_x, y_offset, self.LIGHT_GRAY, scale=0.7)
+                
+                y_offset += line_height
+        
+        # Instructions using small font (at bottom of box)
+        if self.font_small:
+            instr = self.render_text("Press Enter or ESC to close", self.font_small, self.YELLOW)
+            if instr:
+                self.screen.blit(instr, (box_x + 20, box_y + box_height - 25))
+        else:
+            self.draw_simple_text("Press Enter or ESC to close", box_x + 20, box_y + box_height - 25, self.YELLOW)
+
+    def _render_simple_legend_entry(self, line, x_pos, y_pos):
+        """Render a single legend entry with icon and text."""
+        # Parse legend format: "ICON    → Description"
+        parts = line.split("→")
+        if len(parts) != 2:
+            # Just render as text if not a legend entry (section headers, etc.)
+            if self.font_small:
+                text = self.render_text(line, self.font_small, self.LIGHT_GRAY)
+                if text:
+                    self.screen.blit(text, (x_pos, y_pos))
+            return
+        
+        icon_part = parts[0].strip()
+        description = parts[1].strip()
+        
+        # Map icons to colors
+        icon_colors = {
+            '█': self.DARK_GRAY,      # Wall
+            '◆': self.YELLOW,         # Item
+            '▪': self.YELLOW,         # Consumable
+            '╬': self.CYAN,           # Closed door
+            '─': self.BRIGHT_GREEN,   # Open door
+            'E': self.ORANGE,         # Entrance
+            'X': self.MAGENTA,        # Exit
+            'p': self.BRIGHT_GREEN,   # Player
+            'm': self.RED,            # Monster
+            '?': self.LIGHT_GRAY,     # Unknown
         }
         
-        # Text using small font - readable and compact
-        y_offset = box_y + 20
-        line_height = 16
-        
-        for line in help_text.split("\n"):
-            if line.strip():
-                # Render line with special character handling
-                self._render_legend_line(line, box_x + 20, y_offset, special_chars)
-            y_offset += line_height
-        
-        # Instructions using normal font
-        if self.font_normal:
-            instr = self.render_text("Press Enter or ESC to close", self.font_normal, self.YELLOW)
-            if instr:
-                self.screen.blit(instr, (box_x + 20, box_y + box_height - 30))
-        else:
-            self.draw_simple_text("Press Enter or ESC to close", box_x + 20, box_y + box_height - 30, self.YELLOW)
-
-    def _render_legend_line(self, line, x_pos, y_pos, special_chars):
-        """Render a line from legend, handling special characters as colored boxes."""
         x_offset = x_pos
-        i = 0
         
-        while i < len(line):
-            char = line[i]
+        # Render icon as colored box
+        if icon_part in icon_colors:
+            color = icon_colors[icon_part]
+            pygame.draw.rect(self.screen, color, (x_offset, y_pos, 14, 14))
+            pygame.draw.rect(self.screen, self.WHITE, (x_offset, y_pos, 14, 14), 1)
             
-            if char in special_chars:
-                # Draw colored box for special character
-                color = special_chars[char]
-                pygame.draw.rect(self.screen, color, (x_offset, y_pos, 14, 14))
-                pygame.draw.rect(self.screen, self.WHITE, (x_offset, y_pos, 14, 14), 1)
-                x_offset += 16
-                i += 1
-            elif char == ' ':
-                x_offset += 8
-                i += 1
-            else:
-                # Render normal text - find the next special character or end
-                text_chunk = ""
-                while i < len(line) and line[i] not in special_chars and line[i] != ' ':
-                    text_chunk += line[i]
-                    i += 1
-                
-                if text_chunk:
-                    if self.font_small:
-                        text = self.render_text(text_chunk, self.font_small, self.LIGHT_GRAY)
-                        if text:
-                            self.screen.blit(text, (x_offset, y_pos))
-                            x_offset += text.get_width() + 2
-                    else:
-                        self.draw_simple_text(text_chunk, x_offset, y_pos, self.LIGHT_GRAY, scale=0.7)
-                        x_offset += len(text_chunk) * 8
+            # Draw letter inside box for E and X
+            if icon_part in ('E', 'X') and self.font_small:
+                text = self.render_text(icon_part, self.font_small, self.WHITE)
+                if text:
+                    text_x = x_offset + (14 - text.get_width()) // 2
+                    text_y = y_pos + (14 - text.get_height()) // 2
+                    self.screen.blit(text, (text_x, text_y))
+        else:
+            # Render text icon
+            if self.font_small:
+                text = self.render_text(icon_part, self.font_small, self.LIGHT_GRAY)
+                if text:
+                    self.screen.blit(text, (x_offset, y_pos))
+        
+        # Render arrow
+        x_offset += 30
+        if self.font_small:
+            arrow = self.render_text("→", self.font_small, self.LIGHT_GRAY)
+            if arrow:
+                self.screen.blit(arrow, (x_offset, y_pos))
+        
+        # Render description text
+        x_offset += 30
+        if self.font_small:
+            text = self.render_text(description, self.font_small, self.LIGHT_GRAY)
+            if text:
+                self.screen.blit(text, (x_offset, y_pos))
 
     def _get_message_file(self, filename):
         """Get path to a message file in data/messages/."""

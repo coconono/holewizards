@@ -123,15 +123,80 @@ class Spell(Item):
         return f"{self.name} (Spell: {effects_str})"
 
 
+class LootBag(Item):
+    """A bag containing loot from a defeated enemy."""
+
+    def __init__(self, enemy_name, items_list=None):
+        """Initialize a loot bag."""
+        super().__init__(f"{enemy_name}'s Loot Bag", "bag")
+        self.enemy_name = enemy_name
+        self.contents = items_list if items_list else []
+
+    def __repr__(self):
+        return f"{self.name} ({len(self.contents)} items)"
+
+
 # Preset items for initial inventory
+def load_random_weapon_from_config():
+    """Load a random weapon from weapons.cfg."""
+    from configparser import ConfigParser
+    from pathlib import Path
+    import random
+    
+    # Get path to weapons.cfg
+    config_file = Path(__file__).parent.parent / "data" / "weapons.cfg"
+    
+    if not config_file.exists():
+        # Fallback to basic weapon if config doesn't exist
+        return Weapon("Iron Dagger", 2)
+    
+    config = ConfigParser()
+    config.read(config_file)
+    
+    weapons = []
+    for section in config.sections():
+        if section.startswith('weapon_'):
+            weapon_name = config.get(section, 'name')
+            attack_value = config.getint(section, 'attack_value')
+            weapons.append(Weapon(weapon_name, attack_value))
+    
+    return random.choice(weapons) if weapons else Weapon("Iron Dagger", 2)
+
+
+def load_random_armor_from_config():
+    """Load a random armor from armor.cfg."""
+    from configparser import ConfigParser
+    from pathlib import Path
+    import random
+    
+    # Get path to armor.cfg
+    config_file = Path(__file__).parent.parent / "data" / "armor.cfg"
+    
+    if not config_file.exists():
+        # Fallback to basic armor if config doesn't exist
+        return Armor("Leather Armor", 1)
+    
+    config = ConfigParser()
+    config.read(config_file)
+    
+    armors = []
+    for section in config.sections():
+        if section.startswith('armor_'):
+            armor_name = config.get(section, 'name')
+            defense_value = config.getint(section, 'defense_value')
+            armors.append(Armor(armor_name, defense_value))
+    
+    return random.choice(armors) if armors else Armor("Leather Armor", 1)
+
+
 def create_starting_weapon():
-    """Create a basic starting weapon."""
-    return Weapon("Iron Dagger", 2)
+    """Create a random starting weapon from config or basic fallback."""
+    return load_random_weapon_from_config()
 
 
 def create_starting_armor():
-    """Create a basic starting armor."""
-    return Armor("Leather Armor", 1)
+    """Create a random starting armor from config or basic fallback."""
+    return load_random_armor_from_config()
 
 
 def create_starting_spell():

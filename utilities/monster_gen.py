@@ -3,19 +3,67 @@
 
 import random
 from pathlib import Path
+from configparser import ConfigParser
 
 
 def load_names(names_file):
-    """Load names from names.list file."""
+    """Load names from names.list file, removing duplicates."""
     with open(names_file, 'r') as f:
         names = [line.strip() for line in f if line.strip()]
-    return names
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_names = []
+    for name in names:
+        if name not in seen:
+            unique_names.append(name)
+            seen.add(name)
+    return unique_names
 
 
-def generate_monster(name):
-    """Generate a monster with randomized stats."""
+def load_weapons(weapons_file):
+    """Load weapons from weapons.cfg file."""
+    if not Path(weapons_file).exists():
+        return []
+    
+    config = ConfigParser()
+    config.read(weapons_file)
+    
+    weapons = []
+    for section in config.sections():
+        if section.startswith('weapon_'):
+            weapon = {
+                'name': config.get(section, 'name'),
+                'attack_value': config.getint(section, 'attack_value'),
+            }
+            weapons.append(weapon)
+    
+    return weapons
+
+
+def load_armor(armor_file):
+    """Load armor from armor.cfg file."""
+    if not Path(armor_file).exists():
+        return []
+    
+    config = ConfigParser()
+    config.read(armor_file)
+    
+    armors = []
+    for section in config.sections():
+        if section.startswith('armor_'):
+            armor = {
+                'name': config.get(section, 'name'),
+                'defense_value': config.getint(section, 'defense_value'),
+            }
+            armors.append(armor)
+    
+    return armors
+
+
+def generate_monster(name, weapons_list=None, armor_list=None):
+    """Generate a monster with randomized stats and optional random weapon/armor."""
     monster = {
-        'name': name,
+        'name': name.capitalize(),  # Capitalize first letter
         'description': "insert funny text here",
         'hp': random.randint(5, 12),
         'mana': random.randint(1, 5),
@@ -26,13 +74,34 @@ def generate_monster(name):
     }
     monster['max_hp'] = monster['hp']
     monster['max_mana'] = monster['mana']
+    
+    # Randomly assign a weapon to about 50% of monsters
+    if weapons_list and random.random() < 0.5:
+        weapon = random.choice(weapons_list)
+        monster['weapon'] = weapon['name']
+        monster['weapon_attack'] = weapon['attack_value']
+    else:
+        monster['weapon'] = None
+        monster['weapon_attack'] = 0
+    
+    # Randomly assign armor to about 50% of monsters
+    if armor_list and random.random() < 0.5:
+        armor = random.choice(armor_list)
+        monster['armor'] = armor['name']
+        monster['armor_defense'] = armor['defense_value']
+    else:
+        monster['armor'] = None
+        monster['armor_defense'] = 0
+    
     return monster
 
 
-def generate_monsters(names, count=10):
-    """Generate a list of monsters."""
-    selected_names = random.sample(names, min(count, len(names)))
-    monsters = [generate_monster(name) for name in selected_names]
+def generate_monsters(names, count=10, weapons_list=None, armor_list=None):
+    """Generate a list of monsters with unique names and optional random weapons/armor."""
+    # Ensure count doesn't exceed available unique names
+    actual_count = min(count, len(names))
+    selected_names = random.sample(names, actual_count)
+    monsters = [generate_monster(name, weapons_list, armor_list) for name in selected_names]
     return monsters
 
 
@@ -54,6 +123,12 @@ def save_monsters_cfg(output_file, monsters):
             f.write(f"level={monster['level']}\n")
             f.write(f"view_distance={monster['view_distance']}\n")
             f.write(f"reinforcement={','.join(map(str, monster['reinforcement']))}\n")
+            if monster.get('weapon'):
+                f.write(f"weapon={monster['weapon']}\n")
+                f.write(f"weapon_attack={monster['weapon_attack']}\n")
+            if monster.get('armor'):
+                f.write(f"armor={monster['armor']}\n")
+                f.write(f"armor_defense={monster['armor_defense']}\n")
             f.write("\n")
     
     print(f"✓ Generated {len(monsters)} monsters and saved to {output_file}")
@@ -63,14 +138,24 @@ if __name__ == "__main__":
     # Get paths relative to this script
     script_dir = Path(__file__).parent.parent
     names_file = script_dir / "data" / "names.list"
+    weapons_file = script_dir / "data" / "weapons.cfg"
+    armor_file = script_dir / "data" / "armor.cfg"
     output_file = script_dir / "data" / "monsters.cfg"
     
-    # Load names and generate monsters
+    # Load names, weapons, and armor
     names = load_names(names_file)
-    monsters = generate_monsters(names, count=10)
+    weapons = load_weapons(weapons_file)
+    armors = load_armor(armor_file)
+    
+    # Generate monsters with weapons and armor
+    monsters = generate_monsters(names, count=10, 
+                                weapons_list=weapons if weapons else None,
+                                armor_list=armors if armors else None)
     save_monsters_cfg(output_file, monsters)
     
     # Print generated monsters for verification
     print("\nGenerated monsters:")
     for i, monster in enumerate(monsters, 1):
-        print(f"  {i}. {monster['name']} (Level {monster['level']}, HP: {monster['hp']}, XP: {monster['xp']})")
+        weapon_info = f" + {monster.get('weapon', 'None')}" if monster.get('weapon') else ""
+        armor_info = f" + {monster.get('armor', 'None')}" if monster.get('armor') else ""
+        print(f"  {i}. {monster['name']} (Level {monster['level']}, HP: {monster['hp']}, XP: {monster['xp']}){weapon_info}{armor_info}")
