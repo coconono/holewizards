@@ -264,7 +264,7 @@ class GraphicalUI:
         self.log_x = 20
         self.log_y = 440
         self.log_width = 1360
-        self.log_height = 420
+        self.log_height = 340
         
         self.command_input = ""
         self.log_messages = []
@@ -543,13 +543,14 @@ class GraphicalUI:
             '─': self.BRIGHT_GREEN,  # Open door - green
             'E': self.ORANGE,     # Entrance - orange
             'X': self.MAGENTA,    # Exit - magenta
+            'C': (255, 215, 0),   # Chest - gold
             'p': self.BRIGHT_GREEN,  # Player - bright green
             'm': self.RED,        # Monster - red
             '?': self.LIGHT_GRAY, # Unknown - gray
         }
         
         # Characters that should display their letter inside the box
-        chars_with_labels = {'E', 'X'}
+        chars_with_labels = {'E', 'X', 'C'}
         
         x_offset = x_pos
         for char in line:
@@ -583,7 +584,7 @@ class GraphicalUI:
             
             x_offset += 18  # Move to next character position
 
-    def render_stats_display(self, player, enemy, page="player"):
+    def render_stats_display(self, player, enemy, page="player", chest_items=None, loot_items=None, loot_enemy="Unknown"):
         """Render stats in the stats area."""
         # Background
         pygame.draw.rect(self.screen, self.DARK_GRAY,
@@ -715,6 +716,78 @@ class GraphicalUI:
                         self.screen.blit(text, (self.stats_x + 10, y_offset))
                 else:
                     self.draw_simple_text("(empty)", self.stats_x + 10, y_offset, self.DARK_GREEN)
+        
+        elif page == "loot" and loot_items is not None:
+            # Display loot from defeated enemy
+            title_text = f"LOOT: {loot_enemy}"
+            if self.font_normal:
+                text = self.render_text(title_text, self.font_normal, self.WHITE)
+                if text:
+                    self.screen.blit(text, (self.stats_x + 10, y_offset))
+            y_offset += 20
+            
+            if loot_items:
+                for item in loot_items:
+                    if hasattr(item, 'item_type'):
+                        if item.item_type == "weapon":
+                            item_text = f"{item.name} (ATK:{item.get_attack_value()})"
+                        elif item.item_type == "armor":
+                            item_text = f"{item.name} (DEF:{item.get_defense_value()})"
+                        else:
+                            item_text = f"{item.name}"
+                    else:
+                        item_text = f"{item.name}"
+                    
+                    if self.font_small:
+                        text = self.render_text(item_text, self.font_small, self.LIGHT_GRAY)
+                        if text:
+                            self.screen.blit(text, (self.stats_x + 10, y_offset))
+                    else:
+                        self.draw_simple_text(item_text, self.stats_x + 10, y_offset, self.LIGHT_GRAY, scale=0.7)
+                    y_offset += 14
+            else:
+                if self.font_small:
+                    text = self.render_text("(empty)", self.font_small, self.DARK_GREEN)
+                    if text:
+                        self.screen.blit(text, (self.stats_x + 10, y_offset))
+                else:
+                    self.draw_simple_text("(empty)", self.stats_x + 10, y_offset, self.DARK_GREEN)
+        
+        elif page in ["chest", "chest_inventory"] and chest_items is not None:
+            # Display chest contents
+            title_text = "CHEST CONTENTS"
+            if self.font_normal:
+                text = self.render_text(title_text, self.font_normal, self.WHITE)
+                if text:
+                    self.screen.blit(text, (self.stats_x + 10, y_offset))
+            y_offset += 20
+            
+            if chest_items:
+                for item in chest_items:
+                    if hasattr(item, 'item_type'):
+                        if item.item_type == "weapon":
+                            item_text = f"{item.name} (ATK:{item.get_attack_value()})"
+                        elif item.item_type == "armor":
+                            item_text = f"{item.name} (DEF:{item.get_defense_value()})"
+                        else:
+                            item_text = f"{item.name}"
+                    else:
+                        item_text = f"{item.name}"
+                    
+                    if self.font_small:
+                        text = self.render_text(item_text, self.font_small, self.LIGHT_GRAY)
+                        if text:
+                            self.screen.blit(text, (self.stats_x + 10, y_offset))
+                    else:
+                        self.draw_simple_text(item_text, self.stats_x + 10, y_offset, self.LIGHT_GRAY, scale=0.7)
+                    y_offset += 14
+            else:
+                if self.font_small:
+                    text = self.render_text("(empty)", self.font_small, self.DARK_GREEN)
+                    if text:
+                        self.screen.blit(text, (self.stats_x + 10, y_offset))
+                else:
+                    self.draw_simple_text("(empty)", self.stats_x + 10, y_offset, self.DARK_GREEN)
 
     def render_log_display(self):
         """Render the game log."""
@@ -747,22 +820,40 @@ class GraphicalUI:
 
     def render_command_input(self):
         """Render the command input area."""
-        # Background
-        pygame.draw.line(self.screen, self.LIGHT_GRAY,
-                        (self.log_x, self.log_y + self.log_height + 10),
-                        (self.log_x + self.log_width, self.log_y + self.log_height + 10), 2)
+        # Input area dimensions
+        input_area_y = self.log_y + self.log_height + 15
+        input_area_x = self.log_x
+        input_area_width = self.log_width
+        input_area_height = 50
+        
+        # Draw input background
+        pygame.draw.rect(self.screen, self.DARK_GRAY, 
+                        (input_area_x, input_area_y, input_area_width, input_area_height))
+        pygame.draw.rect(self.screen, self.LIGHT_GRAY,
+                        (input_area_x, input_area_y, input_area_width, input_area_height), 2)
+        
+        # Set clip region to prevent text from overflowing
+        clip_rect = pygame.Rect(input_area_x + 5, input_area_y + 5, input_area_width - 10, input_area_height - 10)
+        old_clip = self.screen.get_clip()
+        self.screen.set_clip(clip_rect)
         
         # Prompt and input
+        text_x = input_area_x + 15
+        text_y = input_area_y + 12
+        
         if self.font_normal:
             prompt = self.render_text("> ", self.font_normal, self.CYAN)
             if prompt:
-                self.screen.blit(prompt, (self.log_x + 10, self.log_y + self.log_height + 20))
+                self.screen.blit(prompt, (text_x, text_y))
             
             input_text = self.render_text(self.command_input, self.font_normal, self.WHITE)
             if input_text:
-                self.screen.blit(input_text, (self.log_x + 40, self.log_y + self.log_height + 20))
+                self.screen.blit(input_text, (text_x + 35, text_y))
         else:
-            self.draw_simple_text("> " + self.command_input, self.log_x + 10, self.log_y + self.log_height + 20, self.CYAN)
+            self.draw_simple_text("> " + self.command_input, text_x, text_y, self.CYAN)
+        
+        # Restore original clip region
+        self.screen.set_clip(old_clip)
 
     def render_help_screen(self, help_text):
         """Render a full-screen help/legend display."""
@@ -1139,7 +1230,7 @@ class GraphicalUI:
         
         return "continue"
 
-    def render(self, player, enemy, map_display, page="player"):
+    def render(self, player, enemy, map_display, page="player", chest_items=None, loot_items=None, loot_enemy="Unknown"):
         """Render the complete game screen."""
         self.screen.fill(self.BLACK)
         
@@ -1152,7 +1243,7 @@ class GraphicalUI:
         else:
             # Normal game view - always render content
             self.render_map_display(map_display)
-            self.render_stats_display(player, enemy, page)
+            self.render_stats_display(player, enemy, page, chest_items, loot_items, loot_enemy)
             self.render_log_display()
             self.render_command_input()
         

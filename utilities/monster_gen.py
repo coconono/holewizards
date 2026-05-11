@@ -60,8 +60,8 @@ def load_armor(armor_file):
     return armors
 
 
-def generate_monster(name, weapons_list=None, armor_list=None):
-    """Generate a monster with randomized stats and optional random weapon/armor."""
+def generate_monster(name, weapons_list=None, armor_list=None, spells_list=None):
+    """Generate a monster with randomized stats and optional random weapon/armor/potions/spells."""
     monster = {
         'name': name.capitalize(),  # Capitalize first letter
         'description': "insert funny text here",
@@ -93,16 +93,47 @@ def generate_monster(name, weapons_list=None, armor_list=None):
         monster['armor'] = None
         monster['armor_defense'] = 0
     
+    # Add random potions (0-10 each)
+    monster['hp_potions'] = random.randint(0, 10)
+    monster['mana_potions'] = random.randint(0, 10)
+    
+    # Randomly assign a spell to about 50% of monsters
+    if spells_list and random.random() < 0.5:
+        spell = random.choice(spells_list)
+        monster['spell'] = spell['name']
+    else:
+        monster['spell'] = None
+    
     return monster
 
 
-def generate_monsters(names, count=10, weapons_list=None, armor_list=None):
-    """Generate a list of monsters with unique names and optional random weapons/armor."""
+def generate_monsters(names, count=10, weapons_list=None, armor_list=None, spells_list=None):
+    """Generate a list of monsters with unique names and optional random weapons/armor/potions/spells."""
     # Ensure count doesn't exceed available unique names
     actual_count = min(count, len(names))
     selected_names = random.sample(names, actual_count)
-    monsters = [generate_monster(name, weapons_list, armor_list) for name in selected_names]
+    monsters = [generate_monster(name, weapons_list, armor_list, spells_list) for name in selected_names]
     return monsters
+
+
+def load_spells(spells_file):
+    """Load spells from spells.cfg file."""
+    if not Path(spells_file).exists():
+        return []
+    
+    config = ConfigParser()
+    config.read(spells_file)
+    
+    spells = []
+    for section in config.sections():
+        if section.startswith('spell_'):
+            spell = {
+                'name': config.get(section, 'name'),
+                'level': config.get(section, 'level', fallback='basic'),
+            }
+            spells.append(spell)
+    
+    return spells
 
 
 def save_monsters_cfg(output_file, monsters):
@@ -129,6 +160,12 @@ def save_monsters_cfg(output_file, monsters):
             if monster.get('armor'):
                 f.write(f"armor={monster['armor']}\n")
                 f.write(f"armor_defense={monster['armor_defense']}\n")
+            if monster.get('hp_potions'):
+                f.write(f"hp_potions={monster['hp_potions']}\n")
+            if monster.get('mana_potions'):
+                f.write(f"mana_potions={monster['mana_potions']}\n")
+            if monster.get('spell'):
+                f.write(f"spell={monster['spell']}\n")
             f.write("\n")
     
     print(f"✓ Generated {len(monsters)} monsters and saved to {output_file}")
@@ -140,17 +177,20 @@ if __name__ == "__main__":
     names_file = script_dir / "data" / "names.list"
     weapons_file = script_dir / "data" / "weapons.cfg"
     armor_file = script_dir / "data" / "armor.cfg"
+    spells_file = script_dir / "data" / "spells.cfg"
     output_file = script_dir / "data" / "monsters.cfg"
     
-    # Load names, weapons, and armor
+    # Load names, weapons, armor, and spells
     names = load_names(names_file)
     weapons = load_weapons(weapons_file)
     armors = load_armor(armor_file)
+    spells = load_spells(spells_file)
     
-    # Generate monsters with weapons and armor
+    # Generate monsters with weapons, armor, potions, and spells
     monsters = generate_monsters(names, count=10, 
                                 weapons_list=weapons if weapons else None,
-                                armor_list=armors if armors else None)
+                                armor_list=armors if armors else None,
+                                spells_list=spells if spells else None)
     save_monsters_cfg(output_file, monsters)
     
     # Print generated monsters for verification
@@ -158,4 +198,6 @@ if __name__ == "__main__":
     for i, monster in enumerate(monsters, 1):
         weapon_info = f" + {monster.get('weapon', 'None')}" if monster.get('weapon') else ""
         armor_info = f" + {monster.get('armor', 'None')}" if monster.get('armor') else ""
-        print(f"  {i}. {monster['name']} (Level {monster['level']}, HP: {monster['hp']}, XP: {monster['xp']}){weapon_info}{armor_info}")
+        potions_info = f" + Potions: HP({monster.get('hp_potions', 0)})/Mana({monster.get('mana_potions', 0)})" if (monster.get('hp_potions', 0) or monster.get('mana_potions', 0)) else ""
+        spell_info = f" + {monster.get('spell', 'None')}" if monster.get('spell') else ""
+        print(f"  {i}. {monster['name']} (Level {monster['level']}, HP: {monster['hp']}, XP: {monster['xp']}){weapon_info}{armor_info}{potions_info}{spell_info}")

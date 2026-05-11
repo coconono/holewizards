@@ -136,6 +136,36 @@ class LootBag(Item):
         return f"{self.name} ({len(self.contents)} items)"
 
 
+class StackableItem(Item):
+    """A stackable item (potions, etc.) with quantity tracking."""
+
+    def __init__(self, name, item_type, quantity=1):
+        """Initialize a stackable item."""
+        super().__init__(name, item_type)
+        self.quantity = quantity
+        self.max_quantity = 99
+        self.base_name = name  # Store original name without quantity
+
+    def add_quantity(self, amount):
+        """Add to quantity, capping at max_quantity. Returns overflow."""
+        self.quantity += amount
+        if self.quantity > self.max_quantity:
+            overflow = self.quantity - self.max_quantity
+            self.quantity = self.max_quantity
+            return overflow
+        return 0
+
+    def remove_quantity(self, amount):
+        """Remove from quantity. Returns True if successful."""
+        if self.quantity >= amount:
+            self.quantity -= amount
+            return True
+        return False
+
+    def __repr__(self):
+        return f"{self.base_name} ({self.quantity})"
+
+
 # Preset items for initial inventory
 def load_random_weapon_from_config():
     """Load a random weapon from weapons.cfg."""

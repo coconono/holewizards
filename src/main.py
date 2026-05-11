@@ -61,7 +61,8 @@ class Game:
             # Graphical rendering
             enemy_to_display = self.state.current_enemy if self.state.current_stats_page == "enemy" else self.state.get_current_enemy()
             map_display = self.state.map.get_visible_map(self.state.player, x_distance=49, y_distance=6)
-            self.ui.render(self.state.player, enemy_to_display, map_display, self.state.current_stats_page)
+            self.ui.render(self.state.player, enemy_to_display, map_display, self.state.current_stats_page,
+                          self.state.chest_items, self.state.loot_items, self.state.current_loot_enemy or "Unknown")
             self.ui.tick()
         else:
             # Text rendering
@@ -72,7 +73,9 @@ class Game:
                 enemy_to_display,
                 self.state.map,
                 self.state.current_stats_page,
-                self.state.chest_items
+                self.state.chest_items,
+                self.state.loot_items,
+                self.state.current_loot_enemy or "Unknown"
             )
             print(screen)
             print(self.text_ui.render_command_prompt(), end="", flush=True)
@@ -105,18 +108,13 @@ class Game:
             self.state.current_enemy = None
             self.ui.add_log_message(f"Showing inventory ({len(self.state.player.inventory)} items)")
 
-        elif cmd_type == "show_enemy_inventory":
-            enemy = self.state.current_enemy if self.state.current_enemy else self.state.get_adjacent_enemy()
-            if enemy and not enemy.alive:
-                self.state.current_stats_page = "enemy_inventory"
-                self.ui.add_log_message(f"Showing {enemy.name}'s inventory")
-            elif enemy:
-                self.ui.add_log_message("Enemy is still alive - cannot loot")
-            else:
-                self.ui.add_log_message("No enemy to loot")
+        elif cmd_type == "show_loot":
+            success, message = self.state.show_loot()
+            self.ui.add_log_message(message)
 
-        elif cmd_type == "show_chest_inventory":
-            self.ui.add_log_message("No chest nearby (feature coming soon)")
+        elif cmd_type == "show_chest":
+            success, message = self.state.show_chest()
+            self.ui.add_log_message(message)
 
         elif cmd_type == "list_commands":
             self.show_help()
@@ -235,7 +233,13 @@ class Game:
         # Item commands
         elif cmd_type == "take":
             if args:
-                success, message = self.state.player_take_item(args)
+                # Determine where to take from based on current view
+                if self.state.current_stats_page == "loot":
+                    success, message = self.state.take_loot_item(args)
+                elif self.state.current_stats_page == "chest":
+                    success, message = self.state.take_chest_item(args)
+                else:
+                    success, message = self.state.player_take_item(args)
                 self.ui.add_log_message(message)
             else:
                 self.ui.add_log_message("Take what?")

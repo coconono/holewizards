@@ -115,7 +115,23 @@ class UI:
         
         return lines
 
-    def render_stats_window(self, player, enemy, page="player", chest_items=None):
+    def render_loot_inventory(self, loot_items, enemy_name="Unknown"):
+        """Render loot inventory page."""
+        lines = [
+            "═" * (self.stats_width - 2),
+            f"LOOT: {enemy_name}".center(self.stats_width - 2),
+            "═" * (self.stats_width - 2),
+        ]
+        
+        if not loot_items:
+            lines.append("(empty)")
+        else:
+            for item in loot_items:
+                lines.append(f" {item}")
+        
+        return lines
+
+    def render_stats_window(self, player, enemy, page="player", chest_items=None, loot_items=None, loot_enemy="Unknown"):
         """Render the stats window based on current page."""
         if page == "player":
             lines = self.render_player_stats(player)
@@ -127,6 +143,10 @@ class UI:
             lines = self.render_enemy_inventory(enemy)
         elif page == "chest_inventory":
             lines = self.render_chest_inventory(chest_items or [])
+        elif page == "chest":
+            lines = self.render_chest_inventory(chest_items or [])
+        elif page == "loot":
+            lines = self.render_loot_inventory(loot_items or [], loot_enemy)
         else:
             lines = self.render_player_stats(player)
 
@@ -162,7 +182,7 @@ class UI:
         """Render the command prompt."""
         return "> "
 
-    def render_full_screen(self, player, enemy, map_obj, page="player", chest_items=None):
+    def render_full_screen(self, player, enemy, map_obj, page="player", chest_items=None, loot_items=None, loot_enemy="Unknown"):
         """Render the complete game screen (for reference, terminal will handle actual rendering)."""
         # Calculate display distances to fill available map area optimally
         # X distance to fill map_width, Y distance to keep map compact
@@ -170,7 +190,7 @@ class UI:
         y_distance = 6  # Show about 13 rows (6 above/below + center)
         
         map_display = map_obj.get_visible_map(player, x_distance=x_distance, y_distance=y_distance)
-        stats_lines = self.render_stats_window(player, enemy, page, chest_items)
+        stats_lines = self.render_stats_window(player, enemy, page, chest_items, loot_items, loot_enemy)
         
         # Build the screen
         screen_lines = []
@@ -207,8 +227,8 @@ class UI:
   show player stats          → Display your character stats
   show enemy stats           → Display enemy stats
   show player inventory      → Display your inventory
-  show enemy inventory       → Display enemy inventory (if dead)
-  show chest inventory       → Display chest contents
+  show loot                  → Display loot from defeated enemies
+  show chest                 → Display contents of adjacent chest
   legend                     → Show map legend
   list commands              → Show this help
 
@@ -228,7 +248,7 @@ class UI:
   take [item]                → Pick up an item
   drop [item]                → Drop an item
   equip [item]               → Equip an item/spell
-  use [item]                 → Use/consume an item
+  use [item]                 → Use/consume one item (potions use 1 from stack)
 
 [CONTROL]
 
@@ -259,6 +279,7 @@ class UI:
 [TERRAIN]
 
   █          → Wall (impassable, blocks movement)
+  C          → Chest (closed, stand adjacent and use 'show chest')
   ╬          → Door (closed)
   ─          → Door (open)
   (space)    → Open floor (walkable)
@@ -266,7 +287,7 @@ class UI:
 
 [ITEMS]
 
-  ◆          → Item/Bag (equipment, weapons, armor)
+  ◆          → Loot bag (from defeated enemies) or equipment
   ▪          → Consumable item (potions, etc.)
 
 

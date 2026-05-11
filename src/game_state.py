@@ -1,5 +1,6 @@
 """Game state manager for Hole Wizards game."""
 
+import random
 from player import Player
 from enemy import Enemy
 from map_system import Map
@@ -28,6 +29,9 @@ class GameState:
         self.victory = False
         self.current_stats_page = "player"
         self.chest_items = []  # Items available in current chest
+        self.loot_items = []  # Items available in current loot pile
+        self.current_loot_enemy = None  # Enemy whose loot is being viewed
+        self.chests = {}  # Dictionary of chest locations {(x, y): [items]}
         self._initialize_game()
 
     def _initialize_game(self):
@@ -54,6 +58,9 @@ class GameState:
         
         # Create and place enemies
         self._spawn_enemies()
+        
+        # Create and place chests
+        self._spawn_chests()
 
     def _load_monsters_from_config(self):
         """Load monster definitions from data/monsters.cfg."""
@@ -90,6 +97,11 @@ class GameState:
                     'level': config.getint(section, 'level', fallback=1),
                     'view_distance': config.getint(section, 'view_distance', fallback=5),
                     'reinforcement': config.get(section, 'reinforcement', fallback='5,5,5,5,5,5,5,5,5,5'),
+                    'weapon': config.get(section, 'weapon', fallback=None),
+                    'armor': config.get(section, 'armor', fallback=None),
+                    'hp_potions': config.getint(section, 'hp_potions', fallback=0),
+                    'mana_potions': config.getint(section, 'mana_potions', fallback=0),
+                    'spell': config.get(section, 'spell', fallback=None),
                 }
                 monsters.append(monster_data)
         
@@ -97,6 +109,8 @@ class GameState:
 
     def _spawn_enemies(self):
         """Spawn enemies on the map from config file."""
+        from items import StackableItem
+        
         # Try to load monsters from config
         monster_data_list = self._load_monsters_from_config()
         
@@ -119,17 +133,30 @@ class GameState:
                 except (ValueError, AttributeError):
                     enemy.reinforcement = [5] * 10  # Fallback
                 
-                # Give enemy random items
-                import random
-                if random.random() < 0.5:
-                    weapon = create_starting_weapon()
+                # Give enemy items from config
+                if monster_data.get('weapon'):
+                    weapon = create_starting_weapon()  # TODO: Load specific weapon from config
                     enemy.add_to_inventory(weapon)
                     enemy.equip_weapon(weapon)
                 
-                if random.random() < 0.5:
-                    armor = create_starting_armor()
+                if monster_data.get('armor'):
+                    armor = create_starting_armor()  # TODO: Load specific armor from config
                     enemy.add_to_inventory(armor)
                     enemy.equip_armor(armor)
+                
+                # Add potions as stackable items
+                if monster_data.get('hp_potions', 0) > 0:
+                    hp_potions = StackableItem("HP Potion", "consumable", monster_data['hp_potions'])
+                    enemy.add_to_inventory(hp_potions)
+                
+                if monster_data.get('mana_potions', 0) > 0:
+                    mana_potions = StackableItem("Mana Potion", "consumable", monster_data['mana_potions'])
+                    enemy.add_to_inventory(mana_potions)
+                
+                # Add spell
+                if monster_data.get('spell'):
+                    spell = create_starting_spell()  # TODO: Load specific spell from config
+                    enemy.add_to_inventory(spell)
                 
                 self.enemies.append(enemy)
                 
@@ -146,7 +173,6 @@ class GameState:
             enemy_names = ["Goblin", "Skeleton", "Orc", "Troll", "Wraith"]
             num_enemies = 3
             
-            import random
             for i in range(num_enemies):
                 name = enemy_names[i % len(enemy_names)] + f"_{i}"
                 enemy = Enemy(name)
@@ -172,6 +198,54 @@ class GameState:
                     y = random.randint(5, self.map.height - 5)
                     placed = self.map.place_enemy(enemy, x, y)
                     attempts += 1
+
+    def _spawn_chests(self):
+        """Spawn chests on the map with random contents."""
+        from items import StackableItem
+        
+        num_chests = random.randint(3, 5)
+        
+        for _ in range(num_chests):
+            attempts = 0
+            while attempts < 20:
+                x = random.randint(5, self.map.width - 5)
+                y = random.randint(5, self.map.height - 5)
+                
+                # Check if tile is walkable and not already occupied
+                tile = self.map.get_tile(x, y)
+                if tile and tile.tile_type not in ["wall", "door_closed", "chest"] and not tile.player and not tile.enemy:
+                    # Mark tile as chest
+                    tile.tile_type = "chest"
+                    
+                    # Generate chest contents (2-5 items)
+                    chest_contents = []
+                    num_items = random.randint(2, 5)
+                    
+                    for _ in range(num_items):
+                        item_type = random.choice(["weapon", "armor", "potion_hp", "potion_mana", "spell"])
+                        
+                        if item_type == "weapon":
+                            chest_contents.append(create_starting_weapon())
+                        elif item_type == "armor":
+                            chest_contents.append(create_starting_armor())
+                        elif item_type == "potion_hp":
+                            # Create stackable potion
+                            hp_amount = random.randint(3, 5)
+                            chest_contents.append(StackableItem("HP Potion", "consumable", quantity=1))
+                            chest_contents[-1].hp_increase = hp_amount
+                        elif item_type == "potion_mana":
+                            # Create stackable potion
+                            mana_amount = random.randint(2, 4)
+                            chest_contents.append(StackableItem("Mana Potion", "consumable", quantity=1))
+                            chest_contents[-1].mana_increase = mana_amount
+                        elif item_type == "spell":
+                            chest_contents.append(create_starting_spell())
+                    
+                    # Store chest contents
+                    self.chests[(x, y)] = chest_contents
+                    break
+                
+                attempts += 1
 
     def get_current_enemy(self):
         """Get the enemy at the player's location."""
@@ -257,8 +331,18 @@ class GameState:
         
         if item.item_type == "consumable":
             item.apply_use_effect(self.player)
-            self.player.remove_from_inventory(item)
-            return True, f"Used {item.name}"
+            
+            # For stackable items, only remove one from the stack
+            if hasattr(item, 'remove_quantity'):
+                if item.remove_quantity(1):
+                    # If quantity reaches 0, remove the item entirely
+                    if item.quantity <= 0:
+                        self.player.remove_from_inventory(item)
+                    return True, f"Used {item.base_name}"
+            else:
+                # Non-stackable consumables are removed entirely
+                self.player.remove_from_inventory(item)
+                return True, f"Used {item.name}"
         
         return False, "Cannot use this item"
 
@@ -277,14 +361,8 @@ class GameState:
         if enemy.alive:
             return True, f"Attacked {enemy.name} for {damage} damage! ({enemy.hp} HP remaining)"
         else:
-            # Collect all items (inventory + equipped items)
+            # Collect all items from inventory (equipped items are already in inventory)
             loot_items = list(enemy.inventory)
-            if enemy.equipped_weapon:
-                loot_items.append(enemy.equipped_weapon)
-            if enemy.equipped_armor:
-                loot_items.append(enemy.equipped_armor)
-            if enemy.equipped_spell:
-                loot_items.append(enemy.equipped_spell)
             
             # Create loot bag
             loot_bag = LootBag(enemy.name, loot_items)
@@ -298,7 +376,137 @@ class GameState:
             self.map.remove_enemy(enemy)
             xp_gained = enemy.xp
             self.player.gain_xp(xp_gained)
-            return True, f"Defeated {enemy.name}! Gained {xp_gained} XP! Loot dropped."
+            
+            # Build loot message with items list
+            if loot_items:
+                items_str = ", ".join([str(item) for item in loot_items])
+                return True, f"Defeated {enemy.name}! Gained {xp_gained} XP! Loot: {items_str}"
+            else:
+                return True, f"Defeated {enemy.name}! Gained {xp_gained} XP!"
+
+    def player_defend(self):
+        """Have the player prepare to defend."""
+        self.player.defending = True
+        return True, "You assume a defensive stance"
+
+    def show_loot(self):
+        """Show loot from a dead enemy at current location or adjacent."""
+        px = self.player.position["x"]
+        py = self.player.position["y"]
+        
+        # Check current position and adjacent tiles
+        loot_items = []
+        loot_enemy = "Unknown"
+        
+        # Check current position first
+        items = self.map.get_items_at(px, py)
+        for item in items:
+            if item.item_type == "bag" and hasattr(item, 'contents'):
+                loot_items = item.contents
+                loot_enemy = item.enemy_name
+                break
+        
+        # If no loot found at current position, check adjacent tiles
+        if not loot_items:
+            for dx in [-1, 0, 1]:
+                for dy in [-1, 0, 1]:
+                    if dx == 0 and dy == 0:
+                        continue
+                    nx = px + dx
+                    ny = py + dy
+                    items = self.map.get_items_at(nx, ny)
+                    for item in items:
+                        if item.item_type == "bag" and hasattr(item, 'contents'):
+                            loot_items = item.contents
+                            loot_enemy = item.enemy_name
+                            break
+                    if loot_items:
+                        break
+                if loot_items:
+                    break
+        
+        self.loot_items = loot_items
+        self.current_loot_enemy = loot_enemy
+        self.current_stats_page = "loot"
+        return bool(loot_items), "Loot found" if loot_items else "No loot here"
+
+    def show_chest(self):
+        """Show contents of an adjacent chest."""
+        px = self.player.position["x"]
+        py = self.player.position["y"]
+        
+        # Check adjacent tiles for chests
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                if dx == 0 and dy == 0:
+                    continue
+                nx, ny = px + dx, py + dy
+                if (nx, ny) in self.chests:
+                    self.chest_items = self.chests[(nx, ny)]
+                    self.current_stats_page = "chest"
+                    return True, f"Opened chest at ({nx}, {ny})"
+        
+        return False, "No chest nearby"
+
+    def take_loot_item(self, item_name):
+        """Take an item from the current loot pile."""
+        from items import StackableItem
+        
+        for item in self.loot_items:
+            # Check item name (and base_name if it's a StackableItem)
+            name_matches = item.name.lower() == item_name.lower()
+            if not name_matches and hasattr(item, 'base_name'):
+                name_matches = item.base_name.lower() == item_name.lower()
+            
+            if name_matches:
+                # Check if it's a stackable item
+                if isinstance(item, StackableItem):
+                    # Try to add to existing stack in inventory
+                    for inv_item in self.player.inventory:
+                        if isinstance(inv_item, StackableItem) and inv_item.base_name == item.base_name:
+                            overflow = inv_item.add_quantity(item.quantity)
+                            if overflow > 0:
+                                item.quantity = overflow
+                                return True, f"Took {item.base_name} (now carrying {inv_item.quantity})"
+                            else:
+                                self.loot_items.remove(item)
+                                return True, f"Took {item.base_name} (now carrying {inv_item.quantity})"
+                    # No existing stack, add as new item
+                    self.player.add_to_inventory(item)
+                    self.loot_items.remove(item)
+                    return True, f"Took {item.name}"
+                else:
+                    self.player.add_to_inventory(item)
+                    self.loot_items.remove(item)
+                    return True, f"Took {item.name}"
+        
+        return False, f"Item '{item_name}' not in loot"
+
+    def take_chest_item(self, item_name):
+        """Take an item from the current chest."""
+        from items import StackableItem
+        
+        for item in self.chest_items:
+            if item.name.lower() == item_name.lower() or (hasattr(item, 'base_name') and item.base_name.lower() == item_name.lower()):
+                if isinstance(item, StackableItem):
+                    for inv_item in self.player.inventory:
+                        if isinstance(inv_item, StackableItem) and inv_item.base_name == item.base_name:
+                            overflow = inv_item.add_quantity(item.quantity)
+                            if overflow > 0:
+                                item.quantity = overflow
+                                return True, f"Took {item.base_name} (now carrying {inv_item.quantity})"
+                            else:
+                                self.chest_items.remove(item)
+                                return True, f"Took {item.base_name} (now carrying {inv_item.quantity})"
+                    self.player.add_to_inventory(item)
+                    self.chest_items.remove(item)
+                    return True, f"Took {item.name}"
+                else:
+                    self.player.add_to_inventory(item)
+                    self.chest_items.remove(item)
+                    return True, f"Took {item.name}"
+        
+        return False, f"Item '{item_name}' not in chest"
 
     def player_defend(self):
         """Have the player prepare to defend."""

@@ -183,7 +183,7 @@ Hole Wizards is a text-based dungeon crawling game with:
 
 ### Player
 
-```
+```plaintext
 - HP: integer (starts at 10)
 - Mana: integer (starts at 5)
 - XP: integer (starts at 0)
@@ -199,7 +199,7 @@ Hole Wizards is a text-based dungeon crawling game with:
 
 ### Enemy
 
-```
+```plaintext
 - Name: string
 - HP: integer
 - Mana: integer
@@ -217,7 +217,7 @@ Hole Wizards is a text-based dungeon crawling game with:
 
 ### Item
 
-```
+```plaintext
 - Name: string
 - Type: string (weapon, armor, consumable, etc.)
 - Attack Value: integer (if weapon)
@@ -231,7 +231,7 @@ Hole Wizards is a text-based dungeon crawling game with:
 
 ### Map
 
-```
+```plaintext
 - Width: integer
 - Height: integer
 - Tiles: 2D array

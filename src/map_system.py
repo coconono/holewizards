@@ -13,7 +13,7 @@ class MapTile:
         "open": " ",
         "entrance": "E",
         "exit": "X",
-        "chest": "█",
+        "chest": "C",
         "bag": "◆",
     }
 
