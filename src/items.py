@@ -219,6 +219,50 @@ def load_random_armor_from_config():
     return random.choice(armors) if armors else Armor("Leather Armor", 1)
 
 
+def load_random_spell_from_config():
+    """Load a random spell from spells.cfg."""
+    from configparser import ConfigParser
+    from pathlib import Path
+    import random
+    
+    # Get path to spells.cfg
+    config_file = Path(__file__).parent.parent / "data" / "spells.cfg"
+    
+    if not config_file.exists():
+        # Fallback to basic spell if config doesn't exist
+        return Spell("Spark", "basic")
+    
+    config = ConfigParser()
+    config.read(config_file)
+    
+    spells = []
+    for section in config.sections():
+        if section.startswith('spell_'):
+            spell_name = config.get(section, 'name')
+            spell_level = config.get(section, 'level', fallback='basic')
+            spell = Spell(spell_name, spell_level)
+            
+            # Apply effects from config
+            effects_str = config.get(section, 'effects', fallback='')
+            effects = [e.strip() for e in effects_str.split(',') if e.strip()]
+            
+            for effect in effects:
+                if effect == "attack":
+                    spell.attack_value = config.getint(section, 'attack', fallback=0)
+                elif effect == "defend":
+                    spell.defense_value = config.getint(section, 'defense', fallback=0)
+                elif effect == "heal":
+                    spell.hp_increase = config.getint(section, 'heal', fallback=0)
+                elif effect == "mana_restore":
+                    spell.mana_increase = config.getint(section, 'mana_restore', fallback=0)
+            
+            spell.effects = effects
+            spell.mana_cost = config.getint(section, 'mana_cost', fallback=1)
+            spells.append(spell)
+    
+    return random.choice(spells) if spells else Spell("Spark", "basic")
+
+
 def create_starting_weapon():
     """Create a random starting weapon from config or basic fallback."""
     return load_random_weapon_from_config()
@@ -230,9 +274,8 @@ def create_starting_armor():
 
 
 def create_starting_spell():
-    """Create a basic starting spell."""
-    spell = Spell("Spark", "basic")
-    return spell
+    """Create a random starting spell from config or basic fallback."""
+    return load_random_spell_from_config()
 
 
 def create_hp_potion():

@@ -14,6 +14,7 @@ class Player:
         self.level = 1
         self.position = {"x": x, "y": y}
         self.inventory = []
+        self.max_inventory_size = 20  # Maximum items player can carry
         self.equipped_weapon = None
         self.equipped_armor = None
         self.equipped_spell = None
@@ -51,8 +52,35 @@ class Player:
         self.mana = self.max_mana
 
     def add_to_inventory(self, item):
-        """Add an item to inventory."""
+        """Add an item to inventory. Returns True if successful, False if inventory is full."""
+        if len(self.inventory) >= self.max_inventory_size:
+            return False
         self.inventory.append(item)
+        return True
+
+    def count_weapons_in_inventory(self):
+        """Count how many weapons are in inventory."""
+        count = 0
+        for item in self.inventory:
+            if item.item_type == "weapon":
+                count += 1
+        return count
+
+    def count_armor_in_inventory(self):
+        """Count how many armor pieces are in inventory."""
+        count = 0
+        for item in self.inventory:
+            if item.item_type == "armor":
+                count += 1
+        return count
+
+    def can_carry_weapon(self):
+        """Check if player can carry another weapon (max 2)."""
+        return self.count_weapons_in_inventory() < 2
+
+    def can_carry_armor(self):
+        """Check if player can carry another armor (max 2)."""
+        return self.count_armor_in_inventory() < 2
 
     def remove_from_inventory(self, item):
         """Remove an item from inventory."""

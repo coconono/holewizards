@@ -287,6 +287,16 @@ class GameState:
         
         for item in items:
             if item.name.lower() == item_name.lower():
+                # Check inventory space
+                if len(self.player.inventory) >= self.player.max_inventory_size:
+                    return False, "Inventory is full"
+                
+                # Check weapon/armor limits
+                if item.item_type == "weapon" and not self.player.can_carry_weapon():
+                    return False, "Can only carry 2 weapons max"
+                if item.item_type == "armor" and not self.player.can_carry_armor():
+                    return False, "Can only carry 2 armor pieces max"
+                
                 self.player.add_to_inventory(item)
                 self.map.remove_item_at(item, px, py)
                 return True, f"Took {item.name}"
@@ -343,6 +353,20 @@ class GameState:
                 # Non-stackable consumables are removed entirely
                 self.player.remove_from_inventory(item)
                 return True, f"Used {item.name}"
+        
+        elif item.item_type == "spell":
+            # Check if player has enough mana
+            mana_cost = getattr(item, 'mana_cost', 1)
+            if self.player.mana < mana_cost:
+                return False, f"Not enough mana to cast {item.name} (costs {mana_cost}, have {self.player.mana})"
+            
+            # Consume mana
+            self.player.mana -= mana_cost
+            
+            # Apply spell effects
+            item.apply_use_effect(self.player)
+            
+            return True, f"Cast {item.name} (cost {mana_cost} mana)"
         
         return False, "Cannot use this item"
 
@@ -472,10 +496,21 @@ class GameState:
                                 self.loot_items.remove(item)
                                 return True, f"Took {item.base_name} (now carrying {inv_item.quantity})"
                     # No existing stack, add as new item
+                    if len(self.player.inventory) >= self.player.max_inventory_size:
+                        return False, "Inventory is full"
                     self.player.add_to_inventory(item)
                     self.loot_items.remove(item)
                     return True, f"Took {item.name}"
                 else:
+                    if len(self.player.inventory) >= self.player.max_inventory_size:
+                        return False, "Inventory is full"
+                    
+                    # Check weapon/armor limits
+                    if item.item_type == "weapon" and not self.player.can_carry_weapon():
+                        return False, "Can only carry 2 weapons max"
+                    if item.item_type == "armor" and not self.player.can_carry_armor():
+                        return False, "Can only carry 2 armor pieces max"
+                    
                     self.player.add_to_inventory(item)
                     self.loot_items.remove(item)
                     return True, f"Took {item.name}"
@@ -498,10 +533,21 @@ class GameState:
                             else:
                                 self.chest_items.remove(item)
                                 return True, f"Took {item.base_name} (now carrying {inv_item.quantity})"
+                    if len(self.player.inventory) >= self.player.max_inventory_size:
+                        return False, "Inventory is full"
                     self.player.add_to_inventory(item)
                     self.chest_items.remove(item)
                     return True, f"Took {item.name}"
                 else:
+                    if len(self.player.inventory) >= self.player.max_inventory_size:
+                        return False, "Inventory is full"
+                    
+                    # Check weapon/armor limits
+                    if item.item_type == "weapon" and not self.player.can_carry_weapon():
+                        return False, "Can only carry 2 weapons max"
+                    if item.item_type == "armor" and not self.player.can_carry_armor():
+                        return False, "Can only carry 2 armor pieces max"
+                    
                     self.player.add_to_inventory(item)
                     self.chest_items.remove(item)
                     return True, f"Took {item.name}"
