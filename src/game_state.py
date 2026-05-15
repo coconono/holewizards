@@ -159,15 +159,7 @@ class GameState:
                     enemy.add_to_inventory(spell)
                 
                 self.enemies.append(enemy)
-                
-                # Place on map (avoid player start position)
-                placed = False
-                attempts = 0
-                while not placed and attempts < 10:
-                    x = random.randint(5, self.map.width - 5)
-                    y = random.randint(5, self.map.height - 5)
-                    placed = self.map.place_enemy(enemy, x, y)
-                    attempts += 1
+                self._place_enemy_on_map(enemy)
         else:
             # Fallback: use hardcoded enemies
             enemy_names = ["Goblin", "Skeleton", "Orc", "Troll", "Wraith"]
@@ -189,15 +181,17 @@ class GameState:
                     enemy.equip_armor(armor)
                 
                 self.enemies.append(enemy)
-                
-                # Place on map (avoid player start position)
-                placed = False
-                attempts = 0
-                while not placed and attempts < 10:
-                    x = random.randint(5, self.map.width - 5)
-                    y = random.randint(5, self.map.height - 5)
-                    placed = self.map.place_enemy(enemy, x, y)
-                    attempts += 1
+                self._place_enemy_on_map(enemy)
+
+    def _place_enemy_on_map(self, enemy):
+        """Place an enemy on the map at a random location."""
+        placed = False
+        attempts = 0
+        while not placed and attempts < 10:
+            x = random.randint(5, self.map.width - 5)
+            y = random.randint(5, self.map.height - 5)
+            placed = self.map.place_enemy(enemy, x, y)
+            attempts += 1
 
     def _spawn_chests(self):
         """Spawn chests on the map with random contents."""
@@ -396,8 +390,9 @@ class GameState:
             enemy_y = enemy.position["y"]
             self.map.place_item(loot_bag, enemy_x, enemy_y)
             
-            # Remove dead enemy from map
+            # Remove dead enemy from map and game state
             self.map.remove_enemy(enemy)
+            self.enemies.remove(enemy)
             xp_gained = enemy.xp
             self.player.gain_xp(xp_gained)
             
@@ -407,6 +402,53 @@ class GameState:
                 return True, f"Defeated {enemy.name}! Gained {xp_gained} XP! Loot: {items_str}"
             else:
                 return True, f"Defeated {enemy.name}! Gained {xp_gained} XP!"
+
+    def player_attack_target(self, target_name):
+        """Have the player attack a named enemy (must be adjacent)."""
+        # Find enemy by name
+        target_enemy = None
+        for enemy in self.enemies:
+            if enemy.alive and enemy.name.lower() == target_name.lower():
+                target_enemy = enemy
+                break
+        
+        if not target_enemy:
+            return False, f"Enemy '{target_name}' not found"
+        
+        # Check if adjacent
+        if not self._is_adjacent(self.player, target_enemy):
+            return False, f"{target_enemy.name} is not within reach"
+        
+        # Attack the target
+        damage = self.player.get_attack_damage()
+        target_enemy.take_damage(damage)
+        
+        if target_enemy.alive:
+            return True, f"Attacked {target_enemy.name} for {damage} damage! ({target_enemy.hp} HP remaining)"
+        else:
+            # Collect all items from inventory (equipped items are already in inventory)
+            loot_items = list(target_enemy.inventory)
+            
+            # Create loot bag
+            loot_bag = LootBag(target_enemy.name, loot_items)
+            
+            # Place loot bag on map at enemy's position
+            enemy_x = target_enemy.position["x"]
+            enemy_y = target_enemy.position["y"]
+            self.map.place_item(loot_bag, enemy_x, enemy_y)
+            
+            # Remove dead enemy from map and game state
+            self.map.remove_enemy(target_enemy)
+            self.enemies.remove(target_enemy)
+            xp_gained = target_enemy.xp
+            self.player.gain_xp(xp_gained)
+            
+            # Build loot message with items list
+            if loot_items:
+                items_str = ", ".join([str(item) for item in loot_items])
+                return True, f"Defeated {target_enemy.name}! Gained {xp_gained} XP! Loot: {items_str}"
+            else:
+                return True, f"Defeated {target_enemy.name}! Gained {xp_gained} XP!"
 
     def player_defend(self):
         """Have the player prepare to defend."""
@@ -594,10 +636,11 @@ class GameState:
             enemy.reward_action_for_seeing_player()
 
     def _is_adjacent(self, entity1, entity2):
-        """Check if two entities are adjacent."""
+        """Check if two entities are adjacent (including diagonals)."""
         dx = abs(entity1.position["x"] - entity2.position["x"])
         dy = abs(entity1.position["y"] - entity2.position["y"])
-        return dx + dy == 1
+        # Adjacent if both distances are <= 1 and at least one is non-zero
+        return dx <= 1 and dy <= 1 and (dx != 0 or dy != 0)
 
     def _can_enemy_see_player(self, enemy):
         """Check if an enemy can see the player based on view distance."""

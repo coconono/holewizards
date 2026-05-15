@@ -58,24 +58,35 @@ class UI:
         ]
         return lines
 
-    def render_player_inventory(self, player):
-        """Render player inventory page."""
+    def _render_inventory_list(self, items, title, show_equipped_marker=False, equipped_items=None):
+        """Helper method to render inventory lists consistently."""
         lines = [
             "═" * (self.stats_width - 2),
-            "PLAYER INVENTORY".center(self.stats_width - 2),
+            title.center(self.stats_width - 2),
             "═" * (self.stats_width - 2),
         ]
         
-        if not player.inventory:
+        if not items:
             lines.append("(empty)")
         else:
-            for item in player.inventory:
-                marker = "*" if (item == player.equipped_weapon or 
-                               item == player.equipped_armor or 
-                               item == player.equipped_spell) else " "
-                lines.append(f"{marker} {item}")
+            for item in items:
+                if show_equipped_marker and equipped_items:
+                    marker = "*" if item in equipped_items else " "
+                    lines.append(f"{marker} {item}")
+                else:
+                    lines.append(f" {item}")
         
         return lines
+
+    def render_player_inventory(self, player):
+        """Render player inventory page."""
+        equipped_items = [player.equipped_weapon, player.equipped_armor, player.equipped_spell]
+        return self._render_inventory_list(
+            player.inventory,
+            "PLAYER INVENTORY",
+            show_equipped_marker=True,
+            equipped_items=equipped_items
+        )
 
     def render_enemy_inventory(self, enemy):
         """Render enemy inventory page."""
@@ -83,53 +94,20 @@ class UI:
             return ["No enemy selected"]
         
         if not enemy.alive:
-            lines = [
-                "═" * (self.stats_width - 2),
-                f"{enemy.name}'s INVENTORY".center(self.stats_width - 2),
-                "═" * (self.stats_width - 2),
-            ]
-            
-            if not enemy.inventory:
-                lines.append("(empty)")
-            else:
-                for item in enemy.inventory:
-                    lines.append(f" {item}")
-            
-            return lines
+            return self._render_inventory_list(
+                enemy.inventory,
+                f"{enemy.name}'s INVENTORY"
+            )
         else:
             return ["Enemy is alive - cannot loot"]
 
     def render_chest_inventory(self, chest_items):
         """Render chest inventory page."""
-        lines = [
-            "═" * (self.stats_width - 2),
-            "CHEST INVENTORY".center(self.stats_width - 2),
-            "═" * (self.stats_width - 2),
-        ]
-        
-        if not chest_items:
-            lines.append("(empty)")
-        else:
-            for item in chest_items:
-                lines.append(f" {item}")
-        
-        return lines
+        return self._render_inventory_list(chest_items, "CHEST INVENTORY")
 
     def render_loot_inventory(self, loot_items, enemy_name="Unknown"):
         """Render loot inventory page."""
-        lines = [
-            "═" * (self.stats_width - 2),
-            f"LOOT: {enemy_name}".center(self.stats_width - 2),
-            "═" * (self.stats_width - 2),
-        ]
-        
-        if not loot_items:
-            lines.append("(empty)")
-        else:
-            for item in loot_items:
-                lines.append(f" {item}")
-        
-        return lines
+        return self._render_inventory_list(loot_items, f"LOOT: {enemy_name}")
 
     def render_stats_window(self, player, enemy, page="player", chest_items=None, loot_items=None, loot_enemy="Unknown"):
         """Render the stats window based on current page."""
@@ -141,9 +119,7 @@ class UI:
             lines = self.render_player_inventory(player)
         elif page == "enemy_inventory":
             lines = self.render_enemy_inventory(enemy)
-        elif page == "chest_inventory":
-            lines = self.render_chest_inventory(chest_items or [])
-        elif page == "chest":
+        elif page in ("chest_inventory", "chest"):
             lines = self.render_chest_inventory(chest_items or [])
         elif page == "loot":
             lines = self.render_loot_inventory(loot_items or [], loot_enemy)

@@ -21,10 +21,11 @@ class Enemy:
         self.equipped_armor = None
         self.equipped_spell = None
         self.alive = True
-        self.view_distance = 5
+        self.view_distance = 10  # Increased from 5 to 10
         self.reinforcement = [random.randint(1, 10) for _ in range(10)]  # Weights for 10 different actions (1-10)
         self.last_action = None
         self.defending = False
+        self.last_direction = None  # Track last movement direction to avoid immediately backtracking
 
     def take_damage(self, damage):
         """Reduce HP by damage amount."""
@@ -57,37 +58,36 @@ class Enemy:
 
     def remove_from_inventory(self, item):
         """Remove an item from inventory."""
-        if item in self.inventory:
-            self.inventory.remove(item)
-            if self.equipped_weapon == item:
-                self.equipped_weapon = None
-            if self.equipped_armor == item:
-                self.equipped_armor = None
-            if self.equipped_spell == item:
-                self.equipped_spell = None
-            return True
-        return False
+        if item not in self.inventory:
+            return False
+        self.inventory.remove(item)
+        # Unequip if this item was equipped
+        if self.equipped_weapon == item:
+            self.equipped_weapon = None
+        if self.equipped_armor == item:
+            self.equipped_armor = None
+        if self.equipped_spell == item:
+            self.equipped_spell = None
+        return True
+
+    def _equip_item(self, item, slot):
+        """Generic equip method. Slot can be 'weapon', 'armor', or 'spell'."""
+        if item not in self.inventory:
+            return False
+        setattr(self, f"equipped_{slot}", item)
+        return True
 
     def equip_weapon(self, weapon):
         """Equip a weapon."""
-        if weapon not in self.inventory:
-            return False
-        self.equipped_weapon = weapon
-        return True
+        return self._equip_item(weapon, "weapon")
 
     def equip_armor(self, armor):
         """Equip armor."""
-        if armor not in self.inventory:
-            return False
-        self.equipped_armor = armor
-        return True
+        return self._equip_item(armor, "armor")
 
     def equip_spell(self, spell):
         """Equip a spell."""
-        if spell not in self.inventory:
-            return False
-        self.equipped_spell = spell
-        return True
+        return self._equip_item(spell, "spell")
 
     def get_attack_damage(self):
         """Calculate total attack damage."""
@@ -133,15 +133,8 @@ class Enemy:
 
     def move(self, dx, dy, map_obj):
         """Attempt to move enemy on the map."""
-        new_x = self.position["x"] + dx
-        new_y = self.position["y"] + dy
-        
-        # Check bounds
-        if map_obj.is_walkable(new_x, new_y):
-            self.position["x"] = new_x
-            self.position["y"] = new_y
-            return True
-        return False
+        # Use the map's move_enemy method to update both position dict and tile state
+        return map_obj.move_enemy(self, dx, dy)
 
     def get_visible_tiles(self, map_obj):
         """Get list of visible tiles based on view distance."""
@@ -153,3 +146,71 @@ class Enemy:
                 if map_obj.is_valid_position(x, y):
                     visible.append((x, y))
         return visible
+
+    def get_distance_to(self, target_pos):
+        """Calculate Manhattan distance to target position."""
+        dx = abs(self.position["x"] - target_pos["x"])
+        dy = abs(self.position["y"] - target_pos["y"])
+        return dx + dy
+
+    def can_see_target(self, target_pos):
+        """Check if target is within view distance."""
+        return self.get_distance_to(target_pos) <= self.view_distance
+
+    def get_move_towards_target(self, target_pos, map_obj):
+        """Calculate a single step towards target. Returns (dx, dy) or None if can't move."""
+        current_x = self.position["x"]
+        current_y = self.position["y"]
+        target_x = target_pos["x"]
+        target_y = target_pos["y"]
+        
+        # Prefer moving horizontally or vertically (Manhattan distance)
+        dx = 0 if current_x == target_x else (1 if target_x > current_x else -1)
+        dy = 0 if current_y == target_y else (1 if target_y > current_y else -1)
+        
+        # If both directions are equally good, randomly choose one
+        if dx != 0 and dy != 0 and random.choice([True, False]):
+            dy = 0
+        
+        # Try preferred direction
+        new_x = current_x + dx
+        new_y = current_y + dy
+        if map_obj.is_walkable(new_x, new_y):
+            return (dx, dy)
+        
+        # If preferred fails, try only horizontal
+        if dx != 0:
+            new_x = current_x + dx
+            if map_obj.is_walkable(new_x, current_y):
+                return (dx, 0)
+        
+        # Try only vertical
+        if dy != 0:
+            new_y = current_y + dy
+            if map_obj.is_walkable(current_x, new_y):
+                return (0, dy)
+        
+        return None
+
+    def get_random_move_direction(self, map_obj):
+        """Get a random valid move direction, avoiding the direction just moved from."""
+        # Possible movement directions
+        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        
+        # Remove the direction we just came from
+        if self.last_direction:
+            reverse = (-self.last_direction[0], -self.last_direction[1])
+            directions = [d for d in directions if d != reverse]
+        
+        # Shuffle and try to move
+        random.shuffle(directions)
+        current_x = self.position["x"]
+        current_y = self.position["y"]
+        
+        for dx, dy in directions:
+            new_x = current_x + dx
+            new_y = current_y + dy
+            if map_obj.is_walkable(new_x, new_y):
+                return (dx, dy)
+        
+        return None

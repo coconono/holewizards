@@ -21,13 +21,15 @@ class CommandParser:
         "drop": r"^drop\s+['\"]?(.+?)['\"]?$",
         "equip": r"^equip\s+['\"]?(.+?)['\"]?$",
         "use": r"^use\s+['\"]?(.+?)['\"]?$",
-        "attack": r"^attack$",
+        # Attack patterns: must handle "attack", "attack name", "a", "aname"
+        "attack": r"^attack(?:\s+(.+?))?$|^a(.*)$",
         "defend": r"^defend$",
-        "move": r"^move\s+(\d+)[,\s]+(\d+)$",
-        "move_up": r"^move\s+up$",
-        "move_down": r"^move\s+down$",
-        "move_left": r"^move\s+left$",
-        "move_right": r"^move\s+right$",
+        # Movement patterns: shortcuts first for priority matching
+        "move_up": r"^mu$|^move\s+up$",
+        "move_down": r"^md$|^move\s+down$",
+        "move_left": r"^ml$|^move\s+left$",
+        "move_right": r"^mr$|^move\s+right$",
+        "move": r"^m(\d+)[,\s]+(\d+)$|^move\s+(\d+)[,\s]+(\d+)$",
     }
 
     @staticmethod
@@ -40,8 +42,19 @@ class CommandParser:
             if match:
                 if match.groups():
                     if cmd_type == "move" and len(match.groups()) >= 2:
-                        # Return tuple of coordinates for move command
-                        return (cmd_type, (int(match.group(1)), int(match.group(2))))
+                        # Handle both m6,9 and move 6,9 patterns
+                        x = int(match.group(1) or match.group(3))
+                        y = int(match.group(2) or match.group(4))
+                        return (cmd_type, (x, y))
+                    elif cmd_type == "attack":
+                        # Attack can be "attack", "attack name", "a", or "aname"
+                        # Group 1 is from "attack ..." pattern (optional, can be None)
+                        # Group 2 is from "a..." pattern (required in that branch)
+                        target = match.group(1) or match.group(2)
+                        if target:
+                            return (cmd_type, target.strip())
+                        else:
+                            return (cmd_type, None)  # No target specified
                     else:
                         return (cmd_type, match.group(1).strip())
                 else:
@@ -68,6 +81,9 @@ STATS & INFO:
   show enemy inventory   - Show enemy's items (if dead)
   show chest inventory   - Show chest contents
   list commands / help   - Show this help
+  legend                 - Show map legend
+  quit                   - Quit the game
+  restart                - Restart the game
 
 MOVEMENT:
   move up    - Move up

@@ -20,44 +20,56 @@ def load_names(names_file):
     return unique_names
 
 
-def load_weapons(weapons_file):
-    """Load weapons from weapons.cfg file."""
-    if not Path(weapons_file).exists():
+def _load_config_items(config_file, section_prefix, item_keys):
+    """Generic config loader for items (weapons, armor, spells).
+    
+    Args:
+        config_file: Path to config file
+        section_prefix: Prefix for sections (e.g., 'weapon_', 'armor_')
+        item_keys: List of keys to extract from config (e.g., ['name', 'attack_value'])
+    
+    Returns:
+        List of dictionaries with requested keys
+    """
+    if not Path(config_file).exists():
         return []
     
     config = ConfigParser()
-    config.read(weapons_file)
+    config.read(config_file)
     
-    weapons = []
+    items = []
     for section in config.sections():
-        if section.startswith('weapon_'):
-            weapon = {
-                'name': config.get(section, 'name'),
-                'attack_value': config.getint(section, 'attack_value'),
-            }
-            weapons.append(weapon)
+        if section.startswith(section_prefix):
+            item = {}
+            for key in item_keys:
+                fallback = 0 if key != 'name' else 'Unknown'
+                try:
+                    value = config.get(section, key)
+                    # Try to convert to int if it looks like a number
+                    if key != 'name' and key != 'level':
+                        item[key] = int(value)
+                    else:
+                        item[key] = value
+                except (ValueError, Exception):
+                    item[key] = fallback
+            items.append(item)
     
-    return weapons
+    return items
+
+
+def load_weapons(weapons_file):
+    """Load weapons from weapons.cfg file."""
+    return _load_config_items(weapons_file, 'weapon_', ['name', 'attack_value'])
 
 
 def load_armor(armor_file):
     """Load armor from armor.cfg file."""
-    if not Path(armor_file).exists():
-        return []
-    
-    config = ConfigParser()
-    config.read(armor_file)
-    
-    armors = []
-    for section in config.sections():
-        if section.startswith('armor_'):
-            armor = {
-                'name': config.get(section, 'name'),
-                'defense_value': config.getint(section, 'defense_value'),
-            }
-            armors.append(armor)
-    
-    return armors
+    return _load_config_items(armor_file, 'armor_', ['name', 'defense_value'])
+
+
+def load_spells(spells_file):
+    """Load spells from spells.cfg file."""
+    return _load_config_items(spells_file, 'spell_', ['name', 'level'])
 
 
 def generate_monster(name, weapons_list=None, armor_list=None, spells_list=None):
@@ -114,26 +126,6 @@ def generate_monsters(names, count=10, weapons_list=None, armor_list=None, spell
     selected_names = random.sample(names, actual_count)
     monsters = [generate_monster(name, weapons_list, armor_list, spells_list) for name in selected_names]
     return monsters
-
-
-def load_spells(spells_file):
-    """Load spells from spells.cfg file."""
-    if not Path(spells_file).exists():
-        return []
-    
-    config = ConfigParser()
-    config.read(spells_file)
-    
-    spells = []
-    for section in config.sections():
-        if section.startswith('spell_'):
-            spell = {
-                'name': config.get(section, 'name'),
-                'level': config.get(section, 'level', fallback='basic'),
-            }
-            spells.append(spell)
-    
-    return spells
 
 
 def save_monsters_cfg(output_file, monsters):

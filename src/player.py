@@ -58,63 +58,54 @@ class Player:
         self.inventory.append(item)
         return True
 
-    def count_weapons_in_inventory(self):
-        """Count how many weapons are in inventory."""
-        count = 0
-        for item in self.inventory:
-            if item.item_type == "weapon":
-                count += 1
-        return count
+    def count_items_by_type(self, item_type):
+        """Count items of a specific type in inventory."""
+        return sum(1 for item in self.inventory if item.item_type == item_type)
 
-    def count_armor_in_inventory(self):
-        """Count how many armor pieces are in inventory."""
-        count = 0
-        for item in self.inventory:
-            if item.item_type == "armor":
-                count += 1
-        return count
+    def can_carry_item_type(self, item_type, max_count=2):
+        """Check if player can carry another item of this type."""
+        return self.count_items_by_type(item_type) < max_count
 
     def can_carry_weapon(self):
         """Check if player can carry another weapon (max 2)."""
-        return self.count_weapons_in_inventory() < 2
+        return self.can_carry_item_type("weapon", 2)
 
     def can_carry_armor(self):
         """Check if player can carry another armor (max 2)."""
-        return self.count_armor_in_inventory() < 2
+        return self.can_carry_item_type("armor", 2)
 
     def remove_from_inventory(self, item):
         """Remove an item from inventory."""
-        if item in self.inventory:
-            self.inventory.remove(item)
-            if self.equipped_weapon == item:
-                self.equipped_weapon = None
-            if self.equipped_armor == item:
-                self.equipped_armor = None
-            if self.equipped_spell == item:
-                self.equipped_spell = None
-            return True
-        return False
+        if item not in self.inventory:
+            return False
+        self.inventory.remove(item)
+        # Unequip if this item was equipped
+        if self.equipped_weapon == item:
+            self.equipped_weapon = None
+        if self.equipped_armor == item:
+            self.equipped_armor = None
+        if self.equipped_spell == item:
+            self.equipped_spell = None
+        return True
+
+    def _equip_item(self, item, slot):
+        """Generic equip method. Slot can be 'weapon', 'armor', or 'spell'."""
+        if item not in self.inventory:
+            return False
+        setattr(self, f"equipped_{slot}", item)
+        return True
 
     def equip_weapon(self, weapon):
         """Equip a weapon."""
-        if weapon not in self.inventory:
-            return False
-        self.equipped_weapon = weapon
-        return True
+        return self._equip_item(weapon, "weapon")
 
     def equip_armor(self, armor):
         """Equip armor."""
-        if armor not in self.inventory:
-            return False
-        self.equipped_armor = armor
-        return True
+        return self._equip_item(armor, "armor")
 
     def equip_spell(self, spell):
         """Equip a spell."""
-        if spell not in self.inventory:
-            return False
-        self.equipped_spell = spell
-        return True
+        return self._equip_item(spell, "spell")
 
     def get_attack_damage(self):
         """Calculate total attack damage."""

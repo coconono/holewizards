@@ -23,6 +23,14 @@ except ImportError:
 class Game:
     """Main game controller."""
 
+    # Direction constants for movement
+    DIRECTIONS = {
+        "up": (0, -1),
+        "down": (0, 1),
+        "left": (-1, 0),
+        "right": (1, 0),
+    }
+
     def __init__(self, use_graphics=True):
         """Initialize the game.
         
@@ -31,7 +39,6 @@ class Game:
         """
         self.state = GameState()
         self.running = True
-        self.should_show_intro = True
         self.quit_game = False
         
         # Choose UI backend
@@ -97,7 +104,7 @@ class Game:
         elif cmd_type == "show_enemy_stats":
             enemy = self.state.get_adjacent_enemy()
             if enemy:
-                self.state.current_enemy = enemy  # Store for display
+                self.state.current_enemy = enemy
                 self.state.current_stats_page = "enemy"
                 self.ui.add_log_message(f"Showing {enemy.name}'s stats")
             else:
@@ -132,117 +139,50 @@ class Game:
             self.ui.add_log_message("Restarting game...")
             self.state = GameState()
             self.ui = UI()
-            self.should_show_intro = True
             self.running = False
             return
 
         # Movement commands
-        elif cmd_type == "move_up":
-            if self.state.player_move(0, -1):
-                self.ui.add_log_message("Moved up")
-                enemy = self.state.get_adjacent_enemy()
-                if enemy and enemy.alive:
-                    self.ui.add_log_message(f"You spot {enemy.name} nearby!")
-            else:
-                self.ui.add_log_message("Cannot move up - blocked")
-
-        elif cmd_type == "move_down":
-            if self.state.player_move(0, 1):
-                self.ui.add_log_message("Moved down")
-                enemy = self.state.get_adjacent_enemy()
-                if enemy and enemy.alive:
-                    self.ui.add_log_message(f"You spot {enemy.name} nearby!")
-            else:
-                self.ui.add_log_message("Cannot move down - blocked")
-
-        elif cmd_type == "move_left":
-            if self.state.player_move(-1, 0):
-                self.ui.add_log_message("Moved left")
-                enemy = self.state.get_adjacent_enemy()
-                if enemy and enemy.alive:
-                    self.ui.add_log_message(f"You spot {enemy.name} nearby!")
-            else:
-                self.ui.add_log_message("Cannot move left - blocked")
-
-        elif cmd_type == "move_right":
-            if self.state.player_move(1, 0):
-                self.ui.add_log_message("Moved right")
-                enemy = self.state.get_adjacent_enemy()
-                if enemy and enemy.alive:
-                    self.ui.add_log_message(f"You spot {enemy.name} nearby!")
-            else:
-                self.ui.add_log_message("Cannot move right - blocked")
+        elif cmd_type in ("move_up", "move_down", "move_left", "move_right"):
+            direction_map = {
+                "move_up": "up",
+                "move_down": "down",
+                "move_left": "left",
+                "move_right": "right",
+            }
+            self._handle_directional_move(direction_map[cmd_type])
 
         elif cmd_type == "move":
-            # args is a tuple of (x, y) coordinates
-            if args and isinstance(args, tuple) and len(args) == 2:
-                target_x, target_y = args
-                
-                # Keep moving until destination, blocked, or enemy encountered
-                while True:
-                    current_x = self.state.player.position["x"]
-                    current_y = self.state.player.position["y"]
-                    
-                    # Check if reached destination
-                    if current_x == target_x and current_y == target_y:
-                        self.ui.add_log_message(f"Reached destination ({target_x}, {target_y})")
-                        break
-                    
-                    # Calculate next step
-                    dx = 0 if current_x == target_x else (1 if target_x > current_x else -1)
-                    dy = 0 if current_y == target_y else (1 if target_y > current_y else -1)
-                    
-                    # Try to move
-                    if self.state.player_move(dx, dy):
-                        # Check for adjacent enemy encounter
-                        enemy = self.state.get_adjacent_enemy()
-                        if enemy and enemy.alive:
-                            self.ui.add_log_message(f"You spot {enemy.name} nearby!")
-                            break
-                    else:
-                        self.ui.add_log_message("Path blocked - stopped moving")
-                        break
-            else:
-                self.ui.add_log_message("Invalid coordinates. Use: move x,y")
+            self._handle_targeted_move(args)
 
         # Combat commands
         elif cmd_type == "attack":
-            success, message = self.state.player_attack()
-            self.ui.add_log_message(message)
-            
-            if success:
-                enemy = self.state.get_adjacent_enemy()
-                if enemy and enemy.alive:
-                    # Enemy counterattack
-                    self.state.enemy_take_turn(enemy)
-                    # Simple enemy attack response
-                    if self.state._is_adjacent(enemy, self.state.player):
-                        damage = enemy.get_attack_damage()
-                        if self.state.player.defending:
-                            damage = max(1, damage - self.state.player.get_defense_value())
-                            self.state.player.defending = False
-                            self.ui.add_log_message(f"{enemy.name} attacks but you defend! ({damage} damage)")
-                        else:
-                            self.state.player.take_damage(damage)
-                            self.ui.add_log_message(f"{enemy.name} counterattacks for {damage} damage!")
+            if not args:
+                # No target specified, show list of available targets
+                available_targets = self._get_adjacent_enemy_names()
+                if available_targets:
+                    self.ui.add_log_message(f"Available targets: {', '.join(available_targets)}")
+                    self.ui.add_log_message("Use: attack <name> or a<name>")
+                else:
+                    self.ui.add_log_message("No enemies in range")
+            else:
+                # Attack specified target
+                success, message = self.state.player_attack_target(args)
+                self.ui.add_log_message(message)
+                
+                if success:
+                    # Monster turns after player attack
+                    self._resolve_monster_turns()
 
         elif cmd_type == "defend":
             success, message = self.state.player_defend()
             self.ui.add_log_message(message)
+            # Monsters take turns after player defends
+            self._resolve_monster_turns()
 
         # Item commands
         elif cmd_type == "take":
-            if args:
-                # Determine where to take from based on current view
-                if self.state.current_stats_page == "loot":
-                    success, message = self.state.take_loot_item(args)
-                elif self.state.current_stats_page == "chest":
-                    success, message = self.state.take_chest_item(args)
-                else:
-                    success, message = self.state.player_take_item(args)
-                self.ui.add_log_message(message)
-            else:
-                self.ui.add_log_message("Take what?")
+            self._handle_take_item(args)
 
         elif cmd_type == "drop":
             if args:
@@ -264,6 +204,115 @@ class Game:
                 self.ui.add_log_message(message)
             else:
                 self.ui.add_log_message("Use what?")
+
+    def _handle_directional_move(self, direction):
+        """Handle movement in a cardinal direction."""
+        dx, dy = self.DIRECTIONS[direction]
+        
+        if self.state.player_move(dx, dy):
+            self.ui.add_log_message(f"Moved {direction}")
+            enemy = self.state.get_adjacent_enemy()
+            if enemy and enemy.alive:
+                self.ui.add_log_message(f"You spot {enemy.name} nearby!")
+            # Monsters take their turns after player move
+            self._resolve_monster_turns()
+        else:
+            self.ui.add_log_message(f"Cannot move {direction} - blocked")
+
+    def _handle_targeted_move(self, args):
+        """Handle movement to a specific coordinate with step-by-step resolution."""
+        import time
+        
+        if not args or not isinstance(args, tuple) or len(args) != 2:
+            self.ui.add_log_message("Invalid coordinates. Use: move x,y or m x,y")
+            return
+        
+        target_x, target_y = args
+        
+        # Keep moving until destination, blocked, or enemy encountered
+        while True:
+            current_x = self.state.player.position["x"]
+            current_y = self.state.player.position["y"]
+            
+            # Check if reached destination
+            if current_x == target_x and current_y == target_y:
+                self.ui.add_log_message(f"Reached destination ({target_x}, {target_y})")
+                self.render()  # Final render at destination
+                break
+            
+            # Calculate next step
+            dx = 0 if current_x == target_x else (1 if target_x > current_x else -1)
+            dy = 0 if current_y == target_y else (1 if target_y > current_y else -1)
+            
+            # Try to move
+            if self.state.player_move(dx, dy):
+                # Allow monsters to move (turn-based)
+                self._resolve_monster_turns()
+                
+                # Render after player and monsters move
+                self.render()
+                
+                # Pause before next step
+                time.sleep(0.5)
+                
+                # Check for adjacent enemy encounter
+                enemy = self.state.get_adjacent_enemy()
+                if enemy and enemy.alive:
+                    self.ui.add_log_message(f"You spot {enemy.name} nearby! Movement interrupted.")
+                    self.render()
+                    break
+            else:
+                self.ui.add_log_message("Path blocked - stopped moving")
+                self.render()
+                break
+
+    def _handle_take_item(self, args):
+        """Handle taking an item based on current view."""
+        if not args:
+            self.ui.add_log_message("Take what?")
+            return
+        
+        if self.state.current_stats_page == "loot":
+            success, message = self.state.take_loot_item(args)
+        elif self.state.current_stats_page == "chest":
+            success, message = self.state.take_chest_item(args)
+        else:
+            success, message = self.state.player_take_item(args)
+        
+        self.ui.add_log_message(message)
+
+    def _get_adjacent_enemy_names(self):
+        """Get a list of adjacent enemy names."""
+        adjacent_enemies = []
+        for enemy in self.state.enemies:
+            if enemy.alive and self.state._is_adjacent(self.state.player, enemy):
+                adjacent_enemies.append(enemy.name)
+        return adjacent_enemies
+
+    def _resolve_monster_turns(self):
+        """Have all monsters take their turns."""
+        for enemy in self.state.enemies:
+            if not enemy.alive:
+                continue
+            
+            # Check if monster can see player
+            if enemy.can_see_target(self.state.player.position):
+                enemy.reward_action_for_seeing_player()
+                
+                # If can see but can't attack, move closer
+                if not self.state._is_adjacent(enemy, self.state.player):
+                    move_dir = enemy.get_move_towards_target(self.state.player.position, self.state.map)
+                    if move_dir:
+                        dx, dy = move_dir
+                        enemy.move(dx, dy, self.state.map)
+                        enemy.last_direction = move_dir
+            else:
+                # Random movement (avoiding direction just moved from)
+                move_dir = enemy.get_random_move_direction(self.state.map)
+                if move_dir:
+                    dx, dy = move_dir
+                    enemy.move(dx, dy, self.state.map)
+                    enemy.last_direction = move_dir
 
     def _get_message_file(self, filename):
         """Get path to a message file in data/messages/."""
@@ -319,7 +368,7 @@ class Game:
     def show_help(self):
         """Display the help screen."""
         if self.use_graphics:
-            help_text = UI().render_help()  # Use text UI to generate help text
+            help_text = self.text_ui.render_help() if self.text_ui else UI().render_help()
             self.ui.full_screen_text = help_text
             self.ui.showing_full_screen = "help"
         else:
@@ -331,7 +380,7 @@ class Game:
     def show_legend(self):
         """Display the legend screen."""
         if self.use_graphics:
-            legend_text = UI().render_legend()  # Use text UI to generate legend text
+            legend_text = self.text_ui.render_legend() if self.text_ui else UI().render_legend()
             self.ui.full_screen_text = legend_text
             self.ui.showing_full_screen = "legend"
         else:
@@ -343,21 +392,17 @@ class Game:
     def show_game_over(self, result):
         """Show game over screen."""
         if self.use_graphics:
-            # Show graphics mode victory/defeat screen
             if result == "victory":
                 screen_result = self.ui.render_victory_screen()
             else:
                 screen_result = self.ui.render_defeat_screen()
-            
-            # Return quit signal if user pressed Q/ESC
-            if screen_result == "quit":
-                return "quit"
+            return screen_result
         else:
             # Text mode
             os.system("clear" if os.name == "posix" else "cls")
             
             if result == "victory":
-                victory_text = """
+                print("""
 ╔═══════════════════════════════════════════════════════════════════════╗
 ║                         VICTORY!                                      ║
 ║                                                                       ║
@@ -367,10 +412,9 @@ class Game:
 ║  You emerge from the darkness into the light... a hero!               ║
 ║                                                                       ║
 ╚═══════════════════════════════════════════════════════════════════════╝
-                """
-                print(victory_text)
+                """)
             else:
-                defeat_text = """
+                print("""
 ╔═══════════════════════════════════════════════════════════════════════╗
 ║                         DEFEAT!                                       ║
 ║                                                                       ║
@@ -380,8 +424,7 @@ class Game:
 ║  Your remains will rest in the darkness forever...                    ║
 ║                                                                       ║
 ╚═══════════════════════════════════════════════════════════════════════╝
-                """
-                print(defeat_text)
+                """)
             
             print("\nFinal Stats:")
             print(f"  Level: {self.state.player.level}")
@@ -390,8 +433,7 @@ class Game:
 
     def run(self):
         """Run the main game loop."""
-        if self.should_show_intro:
-            self.show_intro()
+        self.show_intro()
 
         while self.running:
             # Check win/loss conditions
@@ -400,8 +442,7 @@ class Game:
                 game_over_result = self.show_game_over(result)
                 # If user quit from game over screen, exit without restarting
                 if game_over_result == "quit":
-                    self.running = False
-                    self.should_show_intro = False
+                    self.quit_game = True
                 self.running = False
                 break
 
@@ -444,12 +485,8 @@ def main():
             game = Game(use_graphics=use_graphics)
             game.run()
             
-            # If player quit, exit the main loop
+            # Exit if player quit
             if game.quit_game:
-                break
-            
-            # If not showing intro (game ended normally), exit the main loop
-            if not game.should_show_intro:
                 break
     except Exception as e:
         print(f"Error: {e}")
