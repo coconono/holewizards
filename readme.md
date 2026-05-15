@@ -77,22 +77,45 @@ Escape the Hole! Defeat enemy wizards, collect their treasure, find the exit, an
 
 ### Controls
 
-| Command | Action |
-| --- | --- |
-| `up`, `down`, `left`, `right` | Move in that direction |
-| `attack` | Attack adjacent enemy |
-| `defend` | Block damage this turn |
-| `take [item]` | Pick up item |
-| `drop [item]` | Drop item from inventory |
-| `equip [item]` | Equip weapon/armor/spell |
-| `use [item]` | Use consumable item |
-| `show player` | View player stats |
-| `show enemy` | View current enemy stats |
-| `show inventory` | List your items |
-| `legend` | Show map symbols |
-| `help` | Show all commands |
-| `quit` | Exit game |
-| `restart` | Start new game |
+#### Movement
+| Command | Shortcut | Action |
+| --- | --- | --- |
+| `move up` | `mu` | Move up |
+| `move down` | `md` | Move down |
+| `move left` | `ml` | Move left |
+| `move right` | `mr` | Move right |
+| `move x,y` | `mx,y` | Move to coordinates (turn-based, step-by-step with pauses) |
+
+#### Combat
+| Command | Shortcut | Action |
+| --- | --- | --- |
+| `attack [name]` | `a[name]` | Attack named adjacent enemy (shows targets if no name given) |
+| `defend` | - | Prepare to defend this turn |
+
+#### Items
+| Command | Shortcut | Action |
+| --- | --- | --- |
+| `take [item]` | - | Pick up item |
+| `drop [item]` | - | Drop item from inventory |
+| `equip [item]` | - | Equip weapon/armor/spell |
+| `use [item]` | - | Use consumable item |
+
+#### Stats & Info
+| Command | Shortcut | Action |
+| --- | --- | --- |
+| `show player stats` | - | View player stats |
+| `show enemy stats` | - | View current enemy stats |
+| `show player inventory` | - | List your items |
+| `show chest` | - | Show chest contents |
+| `show loot` | - | Show loot from defeated enemy |
+| `legend` | - | Show map symbols |
+| `list commands` / `help` | - | Show all commands |
+
+#### Game
+| Command | Shortcut | Action |
+| --- | --- | --- |
+| `quit` | - | Exit game |
+| `restart` | - | Start new game |
 
 ### Map Symbols
 
