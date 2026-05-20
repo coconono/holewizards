@@ -81,6 +81,7 @@ Escape the Hole! Defeat enemy wizards, collect their treasure, find the exit, an
 ### Controls
 
 #### Movement
+
 | Command | Shortcut | Action |
 | --- | --- | --- |
 | `move up` | `mu` | Move up |
@@ -90,6 +91,7 @@ Escape the Hole! Defeat enemy wizards, collect their treasure, find the exit, an
 | `move x,y` | `mx,y` | Move to coordinates (turn-based, step-by-step with pauses) |
 
 #### Combat
+
 | Command | Shortcut | Action |
 | --- | --- | --- |
 | `attack [name]` | `a[name]` | Attack named adjacent enemy (shows targets if no name given) |
@@ -99,6 +101,7 @@ Escape the Hole! Defeat enemy wizards, collect their treasure, find the exit, an
 **Note:** Use TAB to auto-complete enemy names in combat commands!
 
 #### Items
+
 | Command | Shortcut | Action |
 | --- | --- | --- |
 | `take [item]` | - | Pick up item |
@@ -107,6 +110,7 @@ Escape the Hole! Defeat enemy wizards, collect their treasure, find the exit, an
 | `use [item]` | - | Use consumable item |
 
 #### Stats & Info
+
 | Command | Shortcut | Action |
 | --- | --- | --- |
 | `show player stats` | - | View player stats |
@@ -118,6 +122,7 @@ Escape the Hole! Defeat enemy wizards, collect their treasure, find the exit, an
 | `list commands` / `help` | - | Show all commands |
 
 #### Game
+
 | Command | Shortcut | Action |
 | --- | --- | --- |
 | `quit` | - | Exit game |
