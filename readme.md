@@ -14,9 +14,12 @@ Yes there is a manifesto but for the life of me I cannot find my beret.
 
 - **Graphics Mode** - 1400x900 pixel window with custom ASCII art font rendering
 - **Text Mode** - Traditional terminal-based interface (`--text` flag)
+- **Tab Completion** - Command and target name completion in both graphics and text modes
 - **Dynamic Map Display** - Shows explored areas, auto-aligns to screen edges
 - **Stats System** - Track HP, Mana, XP, Level with multiple display pages
-- **Combat System** - Attack and defend mechanics with randomized damage
+- **Enhanced Combat System** - Attack, defend, and suplex mechanics with positioning
+- **Aggressive Enemy AI** - Enemies attack, suplex, and fight each other with reinforcement learning
+- **Collision Detection** - Proper blocking between player and enemies
 - **Inventory Management** - Pick up, drop, and equip items
 - **Victory/Defeat Screens** - Game-over messages with final stats
 - **Procedural Generation** - Weapons, armor, spells, and monsters with random stats
@@ -90,7 +93,10 @@ Escape the Hole! Defeat enemy wizards, collect their treasure, find the exit, an
 | Command | Shortcut | Action |
 | --- | --- | --- |
 | `attack [name]` | `a[name]` | Attack named adjacent enemy (shows targets if no name given) |
+| `suplex [name]` | `s [name]` | Grapple and reposition enemy (deals weapon damage) |
 | `defend` | - | Prepare to defend this turn |
+
+**Note:** Use TAB to auto-complete enemy names in combat commands!
 
 #### Items
 | Command | Shortcut | Action |
@@ -135,6 +141,11 @@ e = Exit
 - **Stats Pages**: Cycle through Player, Enemy, Inventory, and Chest contents
 - **Leveling**: Defeat enemies to gain XP; reach 10 XP to level up
 - **Combat**: Both player and enemy have HP, Mana, and damage calculations
+  - **Suplex**: Grapples target and throws them to opposite side (weapon damage + positioning)
+  - **Enemy AI**: Enemies attack, suplex, and even fight each other!
+  - **Reinforcement Learning**: Enemies adapt their tactics based on success
+- **Tab Completion**: Press TAB to complete commands and cycle through enemy names
+- **Collision Detection**: Entities properly block each other's movement
 - **Items**: Weapons, armor, and spells with randomized attributes
 - **Treasure**: Collect items from defeated enemies and chests
 
@@ -165,6 +176,7 @@ holewizards/
 ├── enemy.py             # Enemy class and AI
 ├── items.py             # Item definitions
 ├── commands.py          # Command parser
+├── tab_completion.py    # Tab completion system
 ├── ui.py                # Text UI (legacy)
 ├── data/
 │   ├── messages/        # Victory/defeat screens
@@ -174,8 +186,10 @@ holewizards/
 │   ├── monsters.cfg     # Monster templates
 │   └── settings.cfg     # Game configuration
 ├── prompts/
-│   ├── prompt_initial.md    # Core game design
-│   ├── prompt_feature_rev1.md
+│   ├── prompt_initial.md              # Core game design
+│   ├── feature_tabcompletion.prompt.md # Tab completion spec
+│   ├── feature_suplex_prompt.md        # Suplex command spec
+│   ├── tuning_enemy.prompt.md          # Enemy AI tuning spec
 │   └── PROMPT_TEMPLATE.md
 ├── utilities/           # Asset generators
 └── readme.md            # This file
@@ -221,15 +235,27 @@ This project uses **prompt-driven development**:
 - [AGENTS.md](AGENTS.md) - Development approach and guidelines
 - [manifesto.md](manifesto.md) - Why prompt-driven development
 
+## Recent Updates
+
+### ✅ Implemented (May 2026)
+
+- **Tab Completion System** - Auto-complete commands and enemy names with TAB key
+- **Suplex Command** - New grappling attack that repositions enemies
+- **Enhanced Enemy AI** - Enemies now attack, suplex, and fight each other
+- **Collision Detection** - Fixed entity blocking and movement validation
+- **Combat Logging** - All enemy actions are now visible in the game log
+
 ## Future Enhancements
 
-- [ ] Graphical tileset rendering
+- [ ] Graphical tileset rendering (sprites instead of ASCII)
 - [ ] Sound and music
-- [ ] Advanced AI for enemies
-- [ ] Procedural level variety
+- [ ] More tactical combat options (push, pull, etc.)
+- [ ] Procedural level variety (biomes, themes)
 - [ ] Save/load game state
 - [ ] Steam release preparation
 - [ ] Mobile port
+- [ ] Faction system for enemies
+- [ ] Boss encounters
 
 ## License
 
