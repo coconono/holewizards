@@ -22,7 +22,9 @@ class Enemy:
         self.equipped_spell = None
         self.alive = True
         self.view_distance = 10  # Increased from 5 to 10
-        self.reinforcement = [random.randint(1, 10) for _ in range(10)]  # Weights for 10 different actions (1-10)
+        # Weights for 10 different actions (0-3: movement, 4: attack, 5: defend, 6: suplex, 7-9: reserved)
+        self.reinforcement = [random.randint(1, 10) for _ in range(10)]
+        self.reinforcement[6] = random.randint(15, 25)  # Suplex has 3x higher weight - enemies love to suplex!
         self.last_action = None
         self.defending = False
         self.last_direction = None  # Track last movement direction to avoid immediately backtracking

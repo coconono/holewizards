@@ -23,6 +23,8 @@ class CommandParser:
         "use": r"^use\s+['\"]?(.+?)['\"]?$",
         # Attack patterns: must handle "attack", "attack name", "a", "aname"
         "attack": r"^attack(?:\s+(.+?))?$|^a(.*)$",
+        # Suplex patterns: "suplex", "suplex name", "s name"
+        "suplex": r"^suplex(?:\s+(.+?))?$|^s\s+(.+)$",
         "defend": r"^defend$",
         # Movement patterns: shortcuts first for priority matching
         "move_up": r"^mu$|^move\s+up$",
@@ -50,6 +52,15 @@ class CommandParser:
                         # Attack can be "attack", "attack name", "a", or "aname"
                         # Group 1 is from "attack ..." pattern (optional, can be None)
                         # Group 2 is from "a..." pattern (required in that branch)
+                        target = match.group(1) or match.group(2)
+                        if target:
+                            return (cmd_type, target.strip())
+                        else:
+                            return (cmd_type, None)  # No target specified
+                    elif cmd_type == "suplex":
+                        # Suplex can be "suplex", "suplex name", or "s name"
+                        # Group 1 is from "suplex ..." pattern (optional)
+                        # Group 2 is from "s ..." pattern
                         target = match.group(1) or match.group(2)
                         if target:
                             return (cmd_type, target.strip())
@@ -93,6 +104,7 @@ MOVEMENT:
 
 COMBAT:
   attack     - Attack the enemy
+  suplex     - Grapple and reposition enemy (deals weapon damage)
   defend     - Prepare to defend
 
 ITEMS:

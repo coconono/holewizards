@@ -147,8 +147,8 @@ class Map:
         new_y = old_y + dy
 
         if self.is_valid_position(new_x, new_y):
-            tile = self.tiles[new_y][new_x]
-            if tile.is_walkable():
+            # Check if walkable AND no collision with enemies
+            if self.is_walkable(new_x, new_y):
                 # Remove player from old position
                 self.tiles[old_y][old_x].player = None
                 
@@ -174,8 +174,8 @@ class Map:
         new_y = old_y + dy
 
         if self.is_valid_position(new_x, new_y):
-            tile = self.tiles[new_y][new_x]
-            if tile.is_walkable():
+            # Check if walkable AND no collision with player or other enemies
+            if self.is_walkable(new_x, new_y):
                 # Remove enemy from old position
                 self.tiles[old_y][old_x].enemy = None
                 

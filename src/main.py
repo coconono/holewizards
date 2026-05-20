@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from game_state import GameState
 from ui import UI
 from commands import CommandParser
+from tab_completion import TabCompletion
 
 # Try to import pygame for graphical UI
 try:
@@ -41,6 +42,9 @@ class Game:
         self.running = True
         self.quit_game = False
         
+        # Initialize tab completion first (for both modes)
+        self.tab_completion = TabCompletion(self.state, use_readline=True)
+        
         # Choose UI backend
         self.use_graphics = False
         self.ui = None
@@ -48,10 +52,12 @@ class Game:
         
         if use_graphics and GRAPHICS_AVAILABLE:
             try:
-                graphics_ui = GraphicalUI()
+                graphics_ui = GraphicalUI(width=1400, height=900, tab_completion=self.tab_completion)
                 self.use_graphics = True
                 self.ui = graphics_ui
                 self.text_ui = None
+                # Disable readline in graphics mode
+                self.tab_completion.use_readline = False
                 print("✓ Graphics mode initialized (fallback rendering available)")
             except Exception as e:
                 print(f"⚠ Graphics initialization failed: {e}")
@@ -61,6 +67,9 @@ class Game:
         else:
             self.ui = UI()
             self.text_ui = self.ui
+        
+        # Set UI reference on game state for enemy actions
+        self.state.ui = self.ui
 
     def render(self):
         """Render the current game state."""
@@ -138,6 +147,7 @@ class Game:
         elif cmd_type == "restart":
             self.ui.add_log_message("Restarting game...")
             self.state = GameState()
+            self.state.ui = self.ui
             self.ui = UI()
             self.running = False
             return
@@ -172,6 +182,24 @@ class Game:
                 
                 if success:
                     # Monster turns after player attack
+                    self._resolve_monster_turns()
+
+        elif cmd_type == "suplex":
+            if not args:
+                # No target specified, show list of available targets
+                available_targets = self._get_adjacent_enemy_names()
+                if available_targets:
+                    self.ui.add_log_message(f"Available targets: {', '.join(available_targets)}")
+                    self.ui.add_log_message("Use: suplex <name> or s <name>")
+                else:
+                    self.ui.add_log_message("No enemies in range")
+            else:
+                # Suplex specified target
+                success, message = self.state.player_suplex_target(args)
+                self.ui.add_log_message(message)
+                
+                if success:
+                    # Monster turns after player suplex
                     self._resolve_monster_turns()
 
         elif cmd_type == "defend":
@@ -295,24 +323,8 @@ class Game:
             if not enemy.alive:
                 continue
             
-            # Check if monster can see player
-            if enemy.can_see_target(self.state.player.position):
-                enemy.reward_action_for_seeing_player()
-                
-                # If can see but can't attack, move closer
-                if not self.state._is_adjacent(enemy, self.state.player):
-                    move_dir = enemy.get_move_towards_target(self.state.player.position, self.state.map)
-                    if move_dir:
-                        dx, dy = move_dir
-                        enemy.move(dx, dy, self.state.map)
-                        enemy.last_direction = move_dir
-            else:
-                # Random movement (avoiding direction just moved from)
-                move_dir = enemy.get_random_move_direction(self.state.map)
-                if move_dir:
-                    dx, dy = move_dir
-                    enemy.move(dx, dy, self.state.map)
-                    enemy.last_direction = move_dir
+            # Let enemy AI choose and execute action
+            self.state.enemy_take_turn(enemy)
 
     def _get_message_file(self, filename):
         """Get path to a message file in data/messages/."""
@@ -451,7 +463,11 @@ class Game:
 
             # Get player input
             if self.use_graphics:
-                # Graphical input
+                # Graphical input with tab completion
+                # Update game state in tab completion for context-aware completions
+                if self.tab_completion:
+                    self.tab_completion.set_game_state(self.state)
+                
                 command = self.ui.handle_events()
                 if command == "quit":
                     self.quit_game = True
@@ -459,8 +475,12 @@ class Game:
                 elif command:
                     self.process_command(command)
             else:
-                # Text input
+                # Text input with tab completion
                 try:
+                    # Update game state in tab completion for context-aware completions
+                    if self.tab_completion:
+                        self.tab_completion.set_game_state(self.state)
+                    
                     command = input().strip()
                     if command:
                         self.process_command(command)

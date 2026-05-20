@@ -116,31 +116,32 @@ SIMPLE_FONT = {
 class GraphicalUI:
     """Handles graphical rendering using pygame."""
 
-    def __init__(self, width=1400, height=900):
-        """Initialize the graphical UI."""
+    def __init__(self, width=1400, height=900, tab_completion=None):
+        """Initialize the graphical UI.
+        
+        Args:
+            width: Screen width in pixels
+            height: Screen height in pixels
+            tab_completion: Optional TabCompletion instance for command completion
+        """
+        self.tab_completion = tab_completion  # Tab completion system
         # Suppress warnings during initialization
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', RuntimeWarning)
-            
             # Initialize pygame
             pygame.init()
-        
         # Create the main display
         self.screen = pygame.display.set_mode((width, height))
         pygame.display.set_caption("Hole Wizards")
         self.width = width
         self.height = height
         self.clock = pygame.time.Clock()
-        
         # Initialize colors and layout BEFORE fonts
         self._init_colors_and_layout()
-        
         # Initialize font renderer type
         self.font_renderer = 'bitmap'  # Default fallback
-        
         # Initialize fonts (may fail gracefully)
         self.fonts = self._init_fonts()
-        
         # Store font references
         self.font_tiny = self.fonts.get('tiny')
         self.font_small = self.fonts.get('small')
@@ -477,12 +478,22 @@ class GraphicalUI:
                     if event.key == pygame.K_RETURN:
                         command = self.command_input.strip()
                         self.command_input = ""
+                        if self.tab_completion:
+                            self.tab_completion.reset_completion_cycle()
                         if command:
                             return command
                     elif event.key == pygame.K_BACKSPACE:
                         self.command_input = self.command_input[:-1]
+                        if self.tab_completion:
+                            self.tab_completion.reset_completion_cycle()
+                    elif event.key == pygame.K_TAB:
+                        # Handle tab completion
+                        if self.tab_completion:
+                            self.command_input, _has_more = self.tab_completion.complete_input(self.command_input)
                     elif event.unicode.isprintable():
                         self.command_input += event.unicode
+                        if self.tab_completion:
+                            self.tab_completion.reset_completion_cycle()
         
         return None
 

@@ -450,6 +450,84 @@ class GameState:
             else:
                 return True, f"Defeated {target_enemy.name}! Gained {xp_gained} XP!"
 
+    def player_suplex_target(self, target_name):
+        """Have the player suplex a named enemy (must be adjacent)."""
+        # Find enemy by name
+        target_enemy = None
+        for enemy in self.enemies:
+            if enemy.alive and enemy.name.lower() == target_name.lower():
+                target_enemy = enemy
+                break
+        
+        if not target_enemy:
+            return False, f"Enemy '{target_name}' not found"
+        
+        # Check if adjacent
+        if not self._is_adjacent(self.player, target_enemy):
+            return False, f"{target_enemy.name} is not in range for a suplex!"
+        
+        # Calculate damage (weapon-based with slight variance)
+        base_damage = self.player.equipped_weapon.get_attack_value() if self.player.equipped_weapon else 1
+        damage = base_damage + random.randint(0, 2)
+        target_enemy.take_damage(damage)
+        
+        # Calculate opposite position for repositioning
+        px, py = self.player.position["x"], self.player.position["y"]
+        ex, ey = target_enemy.position["x"], target_enemy.position["y"]
+        
+        # Direction vector from player to enemy
+        dx = ex - px
+        dy = ey - py
+        
+        # New position on opposite side
+        new_x = px - dx
+        new_y = py - dy
+        
+        # Try to reposition enemy
+        repositioned = False
+        if self.map.is_walkable(new_x, new_y):
+            # Move enemy to new position
+            if self.map.move_enemy(target_enemy, new_x - ex, new_y - ey):
+                repositioned = True
+        
+        # Build result message
+        if target_enemy.alive:
+            if repositioned:
+                return True, f"You grab {target_enemy.name} and suplex them to the other side! ({damage} damage)\n{target_enemy.name} is repositioned! ({target_enemy.hp} HP remaining)"
+            else:
+                return True, f"You suplex {target_enemy.name} against the wall! ({damage} damage)\n{target_enemy.name} couldn't be moved! ({target_enemy.hp} HP remaining)"
+        else:
+            # Enemy defeated
+            # Collect all items from inventory (equipped items are already in inventory)
+            loot_items = list(target_enemy.inventory)
+            
+            # Create loot bag
+            loot_bag = LootBag(target_enemy.name, loot_items)
+            
+            # Place loot bag on map at enemy's position
+            enemy_x = target_enemy.position["x"]
+            enemy_y = target_enemy.position["y"]
+            self.map.place_item(loot_bag, enemy_x, enemy_y)
+            
+            # Remove dead enemy from map and game state
+            self.map.remove_enemy(target_enemy)
+            self.enemies.remove(target_enemy)
+            xp_gained = target_enemy.xp
+            self.player.gain_xp(xp_gained)
+            
+            # Build loot message with items list
+            if loot_items:
+                items_str = ", ".join([str(item) for item in loot_items])
+                if repositioned:
+                    return True, f"Your suplex defeats {target_enemy.name}! Gained {xp_gained} XP! Loot: {items_str}"
+                else:
+                    return True, f"Your suplex defeats {target_enemy.name}! Gained {xp_gained} XP! Loot: {items_str}"
+            else:
+                if repositioned:
+                    return True, f"Your suplex defeats {target_enemy.name}! Gained {xp_gained} XP!"
+                else:
+                    return True, f"Your suplex defeats {target_enemy.name}! Gained {xp_gained} XP!"
+
     def player_defend(self):
         """Have the player prepare to defend."""
         self.player.defending = True
@@ -627,9 +705,105 @@ class GameState:
                 self.player.take_damage(damage)
                 enemy.record_damage_dealt(damage)
                 enemy.last_action = 4
+                
+                # Log the attack
+                if hasattr(self, 'ui') and self.ui:
+                    self.ui.add_log_message(f"{enemy.name} attacks you for {damage} damage!")
         elif action == 5:  # Defend
             enemy.defending = True
             enemy.last_action = 5
+        elif action == 6:  # Suplex
+            # Build list of valid targets: player first, then adjacent enemies
+            valid_targets = []
+            
+            # Check for adjacent player (priority target)
+            if self._is_adjacent(enemy, self.player):
+                valid_targets.append(('player', self.player))
+            
+            # Check for adjacent enemies
+            for other_enemy in self.enemies:
+                if other_enemy != enemy and other_enemy.alive:
+                    if self._is_adjacent(enemy, other_enemy):
+                        valid_targets.append(('enemy', other_enemy))
+            
+            # If we have valid targets, perform suplex
+            if valid_targets:
+                target_type, target = random.choice(valid_targets)
+                
+                # Calculate damage (weapon-based with slight variance)
+                base_damage = enemy.equipped_weapon.get_attack_value() if enemy.equipped_weapon else 1
+                damage = base_damage + random.randint(0, 2)
+                
+                # Apply defense if target is defending player
+                if target_type == 'player' and self.player.defending:
+                    damage = max(1, damage - self.player.get_defense_value())
+                    self.player.defending = False
+                
+                # Apply damage
+                target.take_damage(damage)
+                enemy.record_damage_dealt(damage)
+                
+                # Calculate opposite position for repositioning
+                ex, ey = enemy.position["x"], enemy.position["y"]
+                tx, ty = target.position["x"], target.position["y"]
+                
+                # Direction vector from enemy to target
+                dx = tx - ex
+                dy = ty - ey
+                
+                # New position on opposite side
+                new_x = ex - dx
+                new_y = ey - dy
+                
+                # Try to reposition target
+                repositioned = False
+                if self.map.is_walkable(new_x, new_y):
+                    if target_type == 'player':
+                        if self.map.move_player(self.player, new_x - tx, new_y - ty):
+                            repositioned = True
+                    else:  # enemy target
+                        if self.map.move_enemy(target, new_x - tx, new_y - ty):
+                            repositioned = True
+                
+                # Display log messages based on target type and outcome
+                if target_type == 'player':
+                    if target.alive:
+                        if repositioned:
+                            if hasattr(self, 'ui') and self.ui:
+                                self.ui.add_log_message(f"{enemy.name} grabs you and suplexes you! ({damage} damage)")
+                                self.ui.add_log_message("You are repositioned!")
+                        else:
+                            if hasattr(self, 'ui') and self.ui:
+                                self.ui.add_log_message(f"{enemy.name} suplexes you against the wall! ({damage} damage)")
+                    # Player death is handled elsewhere
+                else:  # enemy target
+                    if target.alive:
+                        if repositioned:
+                            if hasattr(self, 'ui') and self.ui:
+                                self.ui.add_log_message(f"{enemy.name} grabs {target.name} and suplexes them! ({damage} damage)")
+                                self.ui.add_log_message(f"{target.name} is repositioned!")
+                        else:
+                            if hasattr(self, 'ui') and self.ui:
+                                self.ui.add_log_message(f"{enemy.name} suplexes {target.name} against the wall! ({damage} damage)")
+                    else:
+                        # Target enemy was defeated
+                        if hasattr(self, 'ui') and self.ui:
+                            self.ui.add_log_message(f"{enemy.name}'s suplex defeats {target.name}!")
+                        
+                        # Handle enemy death: create loot, remove from game
+                        loot_items = list(target.inventory)
+                        if loot_items:
+                            from items import LootBag
+                            loot_bag = LootBag(target.name, loot_items)
+                            target_x = target.position["x"]
+                            target_y = target.position["y"]
+                            self.map.place_item(loot_bag, target_x, target_y)
+                        
+                        # Remove dead enemy
+                        self.map.remove_enemy(target)
+                        self.enemies.remove(target)
+                
+                enemy.last_action = 6
         
         # Reward action if enemy can see the player
         if self._can_enemy_see_player(enemy):
