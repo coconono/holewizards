@@ -170,11 +170,11 @@ class StackableItem(Item):
 def load_random_weapon_from_config():
     """Load a random weapon from weapons.cfg."""
     from configparser import ConfigParser
-    from pathlib import Path
+    from resource_path import get_data_path
     import random
     
     # Get path to weapons.cfg
-    config_file = Path(__file__).parent.parent / "data" / "weapons.cfg"
+    config_file = get_data_path('weapons.cfg')
     
     if not config_file.exists():
         # Fallback to basic weapon if config doesn't exist
@@ -196,11 +196,11 @@ def load_random_weapon_from_config():
 def load_random_armor_from_config():
     """Load a random armor from armor.cfg."""
     from configparser import ConfigParser
-    from pathlib import Path
+    from resource_path import get_data_path
     import random
     
     # Get path to armor.cfg
-    config_file = Path(__file__).parent.parent / "data" / "armor.cfg"
+    config_file = get_data_path('armor.cfg')
     
     if not config_file.exists():
         # Fallback to basic armor if config doesn't exist
@@ -222,11 +222,11 @@ def load_random_armor_from_config():
 def load_random_spell_from_config():
     """Load a random spell from spells.cfg."""
     from configparser import ConfigParser
-    from pathlib import Path
+    from resource_path import get_data_path
     import random
     
     # Get path to spells.cfg
-    config_file = Path(__file__).parent.parent / "data" / "spells.cfg"
+    config_file = get_data_path('spells.cfg')
     
     if not config_file.exists():
         # Fallback to basic spell if config doesn't exist

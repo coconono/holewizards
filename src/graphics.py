@@ -6,6 +6,7 @@ import sys
 import warnings
 from configparser import ConfigParser
 from pathlib import Path
+from resource_path import get_resource_path, get_data_path
 
 # Suppress pygame.font circular import warnings
 warnings.filterwarnings('ignore', category=RuntimeWarning, module='pygame.font')
@@ -162,7 +163,6 @@ class GraphicalUI:
         self.font_large = self.fonts.get('large')
         
         # Initialize sprites
-        self.project_root = os.path.dirname(os.path.dirname(__file__))
         self.sprites = self._load_sprites()
 
     def _init_fonts(self):
@@ -230,9 +230,8 @@ class GraphicalUI:
     def _get_font_path(self):
         """Load font path from settings.cfg or return None for default."""
         try:
-            # Get project root (parent of src directory)
-            project_root = os.path.dirname(os.path.dirname(__file__))
-            settings_path = os.path.join(project_root, 'data', 'settings.cfg')
+            # Get settings path
+            settings_path = get_data_path('settings.cfg')
             
             if not os.path.exists(settings_path):
                 return None
@@ -247,7 +246,7 @@ class GraphicalUI:
                     return None
                 
                 # Construct path to font file
-                font_path = os.path.join(project_root, 'data', 'fonts', font_name)
+                font_path = get_data_path(f'fonts/{font_name}')
                 return font_path
         except Exception as e:
             pass
@@ -257,7 +256,7 @@ class GraphicalUI:
     def _load_sprites(self):
         """Load PNG sprites from data/png folder and scale to tile size."""
         sprites = {}
-        sprite_dir = os.path.join(self.project_root, 'data', 'png')
+        sprite_dir = get_data_path('png')
         tile_width = 64
         tile_height = 72
         

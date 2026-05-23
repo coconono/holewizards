@@ -2,4 +2,7 @@
 # Graphical version requires:
 pygame>=2.0.0
 
+# For building executables:
+pyinstaller>=5.0.0
+
 # Text version uses no external dependencies

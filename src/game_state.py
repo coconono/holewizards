@@ -14,6 +14,7 @@ from items import (
 )
 from pathlib import Path
 import configparser
+from resource_path import get_data_path
 
 
 class GameState:
@@ -66,19 +67,10 @@ class GameState:
         """Load monster definitions from data/monsters.cfg."""
         monsters = []
         
-        # Try multiple possible locations for the config file
-        possible_paths = [
-            Path(__file__).parent.parent / "data" / "monsters.cfg",
-            Path.cwd() / "data" / "monsters.cfg",
-        ]
+        # Use resource path utility
+        config_file = get_data_path('monsters.cfg')
         
-        config_file = None
-        for path in possible_paths:
-            if path.exists():
-                config_file = path
-                break
-        
-        if not config_file:
+        if not config_file.exists():
             return None  # Config file not found, use fallback
         
         config = configparser.ConfigParser()
