@@ -24,6 +24,18 @@ try:
 except (ImportError, RuntimeError) as e:
     FREETYPE_AVAILABLE = False
 
+# Mapping of tile characters to sprite filenames
+SPRITE_MAP = {
+    'C': 'spr_chest.png',
+    'E': 'spr_enterportal.png',
+    'X': 'spr_exitportal.png',
+    ' ': 'spr_floortile.png',
+    '◆': 'spr_loot.png',
+    '█': 'spr_walltile.png',
+    'm': 'spr_wizardenemy.png',
+    'p': 'spr_wizardplayer.png',
+}
+
 # Simple text-based character rendering using ASCII art patterns
 # Each character is defined as a list of strings (5x5 grid)
 SIMPLE_FONT = {
@@ -148,6 +160,10 @@ class GraphicalUI:
         self.font_normal = self.fonts.get('normal')
         self.font_title = self.fonts.get('title')
         self.font_large = self.fonts.get('large')
+        
+        # Initialize sprites
+        self.project_root = os.path.dirname(os.path.dirname(__file__))
+        self.sprites = self._load_sprites()
 
     def _init_fonts(self):
         """Initialize fonts from data/fonts folder based on settings.cfg."""
@@ -237,6 +253,54 @@ class GraphicalUI:
             pass
         
         return None
+    
+    def _load_sprites(self):
+        """Load PNG sprites from data/png folder and scale to tile size."""
+        sprites = {}
+        sprite_dir = os.path.join(self.project_root, 'data', 'png')
+        tile_width = 64
+        tile_height = 72
+        
+        if not os.path.exists(sprite_dir):
+            print(f"Warning: Sprite directory not found: {sprite_dir}")
+            return sprites
+        
+        # Check if PIL is available for loading PNGs (pygame may not have PNG support)
+        if not PIL_AVAILABLE:
+            print("Warning: PIL/Pillow not available. Cannot load PNG sprites.")
+            print("Install Pillow with: pip install Pillow")
+            return sprites
+        
+        # Load each sprite from SPRITE_MAP
+        for char, filename in SPRITE_MAP.items():
+            sprite_path = os.path.join(sprite_dir, filename)
+            try:
+                if os.path.exists(sprite_path):
+                    # Load PNG using PIL (more reliable than pygame for PNG support)
+                    pil_image = Image.open(sprite_path).convert('RGBA')
+                    
+                    # Resize using PIL
+                    pil_image = pil_image.resize((tile_width, tile_height), Image.LANCZOS)
+                    
+                    # Convert PIL image to pygame surface
+                    image_string = pil_image.tobytes()
+                    pygame_surface = pygame.image.fromstring(image_string, pil_image.size, 'RGBA')
+                    
+                    sprites[char] = pygame_surface
+                else:
+                    print(f"Warning: Sprite file not found: {sprite_path}")
+                    sprites[char] = None
+            except Exception as e:
+                print(f"Warning: Failed to process sprite {filename}: {e}")
+                sprites[char] = None
+        
+        loaded_count = len([s for s in sprites.values() if s is not None])
+        if loaded_count > 0:
+            print(f"✓ Loaded {loaded_count}/{len(SPRITE_MAP)} sprites successfully")
+        else:
+            print(f"✗ Failed to load any sprites (0/{len(SPRITE_MAP)})")
+        
+        return sprites
         
     def _init_colors_and_layout(self):
         """Initialize colors and layout constants."""
@@ -515,13 +579,12 @@ class GraphicalUI:
         
         # Map content - calculate max lines to fill entire window
         lines = map_display.split("\n")
-        line_height = 24  # Pixels per line (22 char height + 2 padding)
+        line_height = 72  # Pixels per line (matches sprite height)
         available_height = self.map_height - 20  # Account for padding
         max_lines = available_height // line_height
         
         # Calculate character width for alignment
-        pixel_size = 4
-        char_width = (5 * pixel_size) + 2
+        char_width = 72  # Matches sprite width
         available_width = self.map_width - 20  # Account for padding
         max_chars_per_line = available_width // char_width
         
@@ -544,8 +607,15 @@ class GraphicalUI:
             y_offset += line_height
 
     def render_map_line(self, line, x_pos, y_pos):
-        """Render a single line of the map, handling special characters."""
-        # Special tile characters that need visual rendering
+        """Render a single line of the map with layered sprite rendering."""
+        # Define layering order (from bottom to top)
+        # Layer 1: Floor (always rendered first)
+        # Layer 2: Portals (E, X)
+        # Layer 3: Chests and loot (C, ◆)
+        # Layer 4: Player and enemies (p, m)
+        # Layer 5: Walls (█) - top layer
+        
+        # Fallback colors for characters without sprites or when sprites fail
         special_chars = {
             '█': self.DARK_GRAY,  # Wall - gray
             '◆': self.YELLOW,     # Item/bag - yellow
@@ -557,7 +627,7 @@ class GraphicalUI:
             'C': (255, 215, 0),   # Chest - gold
             'p': self.BRIGHT_GREEN,  # Player - bright green
             'm': self.RED,        # Monster - red
-            '?': self.LIGHT_GRAY, # Unknown - gray
+            '?': self.BLACK,      # Undiscovered - black
         }
         
         # Characters that should display their letter inside the box
@@ -565,35 +635,55 @@ class GraphicalUI:
         
         x_offset = x_pos
         for char in line:
-            if char in special_chars:
-                # Render special character as a colored box/shape
+            # Handle undiscovered tiles - always render as solid black
+            if char == '?':
+                pygame.draw.rect(self.screen, self.BLACK, 
+                               (x_offset, y_pos, 64, 72))
+                x_offset += 72
+                continue
+            
+            # Determine if we should use sprites or fallback to colored boxes
+            use_sprites = bool(self.sprites)
+            
+            if use_sprites and char in self.sprites and self.sprites[char] is not None:
+                # Sprite rendering with layering
+                # Layer 1: Always render floor tile as base (unless it's a wall)
+                floor_sprite = self.sprites.get(' ')
+                if floor_sprite and char != '█':
+                    self.screen.blit(floor_sprite, (x_offset, y_pos))
+                
+                # Layer 2-5: Render the tile's sprite based on its character
+                tile_sprite = self.sprites.get(char)
+                if tile_sprite:
+                    self.screen.blit(tile_sprite, (x_offset, y_pos))
+            
+            elif char in special_chars:
+                # Fallback: Render as colored box when sprite unavailable
                 color = special_chars[char]
                 # Draw a filled square for the character
                 pygame.draw.rect(self.screen, color, 
-                               (x_offset, y_pos, 16, 18))
+                               (x_offset, y_pos, 64, 72))
                 # Draw border
                 pygame.draw.rect(self.screen, self.WHITE, 
-                               (x_offset, y_pos, 16, 18), 1)
+                               (x_offset, y_pos, 64, 72), 1)
                 
-                # Draw letter inside the box for E and X
+                # Draw letter inside the box for E, X, C
                 if char in chars_with_labels and self.font_small:
                     text = self.render_text(char, self.font_small, self.WHITE)
                     if text:
                         # Center the text inside the box
-                        text_x = x_offset + (16 - text.get_width()) // 2
-                        text_y = y_pos + (18 - text.get_height()) // 2
+                        text_x = x_offset + (64 - text.get_width()) // 2
+                        text_y = y_pos + (72 - text.get_height()) // 2
                         self.screen.blit(text, (text_x, text_y))
+            
             else:
-                # Render normal character with the font
+                # Render normal character with the font (for unknown/unmapped tiles)
                 if self.font_small:
                     text = self.render_text(char, self.font_small, self.BRIGHT_GREEN)
                     if text:
                         self.screen.blit(text, (x_offset, y_pos))
-                else:
-                    # Fallback: don't render
-                    pass
             
-            x_offset += 18  # Move to next character position
+            x_offset += 72  # Move to next character position
 
     def render_stats_display(self, player, enemy, page="player", chest_items=None, loot_items=None, loot_enemy="Unknown"):
         """Render stats in the stats area."""

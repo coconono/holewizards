@@ -179,7 +179,7 @@ if __name__ == "__main__":
     spells = load_spells(spells_file)
     
     # Generate monsters with weapons, armor, potions, and spells
-    monsters = generate_monsters(names, count=10, 
+    monsters = generate_monsters(names, count=100, 
                                 weapons_list=weapons if weapons else None,
                                 armor_list=armors if armors else None,
                                 spells_list=spells if spells else None)

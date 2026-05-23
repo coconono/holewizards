@@ -76,7 +76,10 @@ class Game:
         if self.use_graphics:
             # Graphical rendering
             enemy_to_display = self.state.current_enemy if self.state.current_stats_page == "enemy" else self.state.get_current_enemy()
-            map_display = self.state.map.get_visible_map(self.state.player, x_distance=49, y_distance=6)
+            # Calculate view distances based on sprite size (64x72 pixels with 72px spacing)
+            # Map area is 800x400, so we can fit ~11 tiles wide x ~5.5 tiles tall
+            # Use half of that to center the player (with some padding)
+            map_display = self.state.map.get_visible_map(self.state.player, x_distance=5, y_distance=2)
             self.ui.render(self.state.player, enemy_to_display, map_display, self.state.current_stats_page,
                           self.state.chest_items, self.state.loot_items, self.state.current_loot_enemy or "Unknown")
             self.ui.tick()
