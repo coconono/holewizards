@@ -16,9 +16,11 @@ from tab_completion import TabCompletion
 # Try to import pygame for graphical UI
 try:
     from graphics import GraphicalUI
+    import pygame
     GRAPHICS_AVAILABLE = True
 except ImportError:
     GRAPHICS_AVAILABLE = False
+    pygame = None
 
 
 class Game:
@@ -73,8 +75,13 @@ class Game:
 
     def render(self):
         """Render the current game state."""
+        # Update entity names for log formatting
+        enemy_names = [enemy.name for enemy in self.state.enemies if enemy.alive]
+        player_name = "You"  # Player is referred to as "You" in messages
+        
         if self.use_graphics:
             # Graphical rendering
+            self.ui.set_entity_names(player_name, enemy_names)
             enemy_to_display = self.state.current_enemy if self.state.current_stats_page == "enemy" else self.state.get_current_enemy()
             # Calculate view distances based on sprite size (64x72 pixels with 72px spacing)
             # Map area is 800x400, so we can fit ~11 tiles wide x ~5.5 tiles tall
@@ -85,6 +92,7 @@ class Game:
             self.ui.tick()
         else:
             # Text rendering
+            self.text_ui.set_entity_names(player_name, enemy_names)
             os.system("clear" if os.name == "posix" else "cls")
             enemy_to_display = self.state.current_enemy if self.state.current_stats_page == "enemy" else self.state.get_current_enemy()
             screen = self.text_ui.render_full_screen(
@@ -104,36 +112,36 @@ class Game:
         cmd_type, args = CommandParser.parse(command_string)
         
         if cmd_type is None:
-            self.ui.add_log_message("Unknown command. Type 'help' for commands.")
+            self.ui.add_log_message("Unknown command. Type 'help' for commands.", "system")
             return
 
         # Stats commands
         if cmd_type == "show_player_stats":
             self.state.current_stats_page = "player"
             self.state.current_enemy = None
-            self.ui.add_log_message("Showing player stats")
+            self.ui.add_log_message("Showing player stats", "system")
 
         elif cmd_type == "show_enemy_stats":
             enemy = self.state.get_adjacent_enemy()
             if enemy:
                 self.state.current_enemy = enemy
                 self.state.current_stats_page = "enemy"
-                self.ui.add_log_message(f"Showing {enemy.name}'s stats")
+                self.ui.add_log_message(f"Showing {enemy.name}'s stats", "system")
             else:
-                self.ui.add_log_message("No enemy nearby")
+                self.ui.add_log_message("No enemy nearby", "system")
 
         elif cmd_type == "show_player_inventory":
             self.state.current_stats_page = "player_inventory"
             self.state.current_enemy = None
-            self.ui.add_log_message(f"Showing inventory ({len(self.state.player.inventory)} items)")
+            self.ui.add_log_message(f"Showing inventory ({len(self.state.player.inventory)} items)", "system")
 
         elif cmd_type == "show_loot":
             success, message = self.state.show_loot()
-            self.ui.add_log_message(message)
+            self.ui.add_log_message(message, "loot")
 
         elif cmd_type == "show_chest":
             success, message = self.state.show_chest()
-            self.ui.add_log_message(message)
+            self.ui.add_log_message(message, "loot")
 
         elif cmd_type == "list_commands":
             self.show_help()
@@ -142,13 +150,13 @@ class Game:
             self.show_legend()
 
         elif cmd_type == "quit":
-            self.ui.add_log_message("Thanks for playing Hole Wizards!")
+            self.ui.add_log_message("Thanks for playing Hole Wizards!", "system")
             self.quit_game = True
             self.running = False
             return
 
         elif cmd_type == "restart":
-            self.ui.add_log_message("Restarting game...")
+            self.ui.add_log_message("Restarting game...", "system")
             self.state = GameState()
             self.state.ui = self.ui
             self.ui = UI()
@@ -174,14 +182,16 @@ class Game:
                 # No target specified, show list of available targets
                 available_targets = self._get_adjacent_enemy_names()
                 if available_targets:
-                    self.ui.add_log_message(f"Available targets: {', '.join(available_targets)}")
-                    self.ui.add_log_message("Use: attack <name> or a<name>")
+                    self.ui.add_log_message(f"Available targets: {', '.join(available_targets)}", "system")
+                    self.ui.add_log_message("Use: attack <name> or a<name>", "system")
                 else:
-                    self.ui.add_log_message("No enemies in range")
+                    self.ui.add_log_message("No enemies in range", "system")
             else:
                 # Attack specified target
                 success, message = self.state.player_attack_target(args)
-                self.ui.add_log_message(message)
+                # Determine event type based on success (victory if enemy defeated, combat_dealt otherwise)
+                event_type = "victory" if success and "Defeated" in message else "combat_dealt"
+                self.ui.add_log_message(message, event_type)
                 
                 if success:
                     # Monster turns after player attack
@@ -192,14 +202,16 @@ class Game:
                 # No target specified, show list of available targets
                 available_targets = self._get_adjacent_enemy_names()
                 if available_targets:
-                    self.ui.add_log_message(f"Available targets: {', '.join(available_targets)}")
-                    self.ui.add_log_message("Use: suplex <name> or s <name>")
+                    self.ui.add_log_message(f"Available targets: {', '.join(available_targets)}", "system")
+                    self.ui.add_log_message("Use: suplex <name> or s <name>", "system")
                 else:
-                    self.ui.add_log_message("No enemies in range")
+                    self.ui.add_log_message("No enemies in range", "system")
             else:
                 # Suplex specified target
                 success, message = self.state.player_suplex_target(args)
-                self.ui.add_log_message(message)
+                # Suplex with repositioning is a status effect, defeats are victory
+                event_type = "victory" if success and "defeats" in message else ("status" if "repositioned" in message else "combat_dealt")
+                self.ui.add_log_message(message, event_type)
                 
                 if success:
                     # Monster turns after player suplex
@@ -207,7 +219,7 @@ class Game:
 
         elif cmd_type == "defend":
             success, message = self.state.player_defend()
-            self.ui.add_log_message(message)
+            self.ui.add_log_message(message, "status")
             # Monsters take turns after player defends
             self._resolve_monster_turns()
 
@@ -218,44 +230,46 @@ class Game:
         elif cmd_type == "drop":
             if args:
                 success, message = self.state.player_drop_item(args)
-                self.ui.add_log_message(message)
+                self.ui.add_log_message(message, "loot")
             else:
-                self.ui.add_log_message("Drop what?")
+                self.ui.add_log_message("Drop what?", "system")
 
         elif cmd_type == "equip":
             if args:
                 success, message = self.state.player_equip_item(args)
-                self.ui.add_log_message(message)
+                self.ui.add_log_message(message, "loot")
             else:
-                self.ui.add_log_message("Equip what?")
+                self.ui.add_log_message("Equip what?", "system")
 
         elif cmd_type == "use":
             if args:
                 success, message = self.state.player_use_item(args)
-                self.ui.add_log_message(message)
+                # Use items can be healing (potions) or other
+                event_type = "healing" if "HP" in message or "Mana" in message or "Restored" in message else "loot"
+                self.ui.add_log_message(message, event_type)
             else:
-                self.ui.add_log_message("Use what?")
+                self.ui.add_log_message("Use what?", "system")
 
     def _handle_directional_move(self, direction):
         """Handle movement in a cardinal direction."""
         dx, dy = self.DIRECTIONS[direction]
         
         if self.state.player_move(dx, dy):
-            self.ui.add_log_message(f"Moved {direction}")
+            self.ui.add_log_message(f"Moved {direction}", "movement")
             enemy = self.state.get_adjacent_enemy()
             if enemy and enemy.alive:
-                self.ui.add_log_message(f"You spot {enemy.name} nearby!")
+                self.ui.add_log_message(f"You spot {enemy.name} nearby!", "movement")
             # Monsters take their turns after player move
             self._resolve_monster_turns()
         else:
-            self.ui.add_log_message(f"Cannot move {direction} - blocked")
+            self.ui.add_log_message(f"Cannot move {direction} - blocked", "movement")
 
     def _handle_targeted_move(self, args):
         """Handle movement to a specific coordinate with step-by-step resolution."""
         import time
         
         if not args or not isinstance(args, tuple) or len(args) != 2:
-            self.ui.add_log_message("Invalid coordinates. Use: move x,y or m x,y")
+            self.ui.add_log_message("Invalid coordinates. Use: move x,y or m x,y", "system")
             return
         
         target_x, target_y = args
@@ -267,7 +281,7 @@ class Game:
             
             # Check if reached destination
             if current_x == target_x and current_y == target_y:
-                self.ui.add_log_message(f"Reached destination ({target_x}, {target_y})")
+                self.ui.add_log_message(f"Reached destination ({target_x}, {target_y})", "movement")
                 self.render()  # Final render at destination
                 break
             
@@ -289,18 +303,18 @@ class Game:
                 # Check for adjacent enemy encounter
                 enemy = self.state.get_adjacent_enemy()
                 if enemy and enemy.alive:
-                    self.ui.add_log_message(f"You spot {enemy.name} nearby! Movement interrupted.")
+                    self.ui.add_log_message(f"You spot {enemy.name} nearby! Movement interrupted.", "movement")
                     self.render()
                     break
             else:
-                self.ui.add_log_message("Path blocked - stopped moving")
+                self.ui.add_log_message("Path blocked - stopped moving", "movement")
                 self.render()
                 break
 
     def _handle_take_item(self, args):
         """Handle taking an item based on current view."""
         if not args:
-            self.ui.add_log_message("Take what?")
+            self.ui.add_log_message("Take what?", "system")
             return
         
         if self.state.current_stats_page == "loot":
@@ -310,7 +324,7 @@ class Game:
         else:
             success, message = self.state.player_take_item(args)
         
-        self.ui.add_log_message(message)
+        self.ui.add_log_message(message, "loot")
 
     def _get_adjacent_enemy_names(self):
         """Get a list of adjacent enemy names."""
@@ -328,6 +342,9 @@ class Game:
             
             # Let enemy AI choose and execute action
             self.state.enemy_take_turn(enemy)
+        
+        # Track turns elapsed
+        self.state.combat_stats['turns_elapsed'] += 1
 
     def _get_message_file(self, filename):
         """Get path to a message file in data/messages/."""
@@ -405,46 +422,60 @@ class Game:
             input("\nPress Enter to return to the game...")
 
     def show_game_over(self, result):
-        """Show game over screen."""
+        """Show game over screen with performance statistics."""
+        # Load the appropriate message file
+        message = None
+        message_file = "victory.msg" if result == "victory" else "defeat.msg"
+        message_path = self._get_message_file(message_file)
+        if message_path:
+            try:
+                with open(message_path, 'r') as f:
+                    message = f.read().strip()
+            except:
+                pass
+        
         if self.use_graphics:
+            # Graphics mode - render defeat/victory screen with stats
             if result == "victory":
-                screen_result = self.ui.render_victory_screen()
+                self.ui.render_victory_screen(self.state.combat_stats, message)
             else:
-                screen_result = self.ui.render_defeat_screen()
-            return screen_result
+                self.ui.render_defeat_screen(self.state.combat_stats, message)
+            
+            # Wait for user input: Enter/Space to restart, ESC/Q to quit
+            waiting = True
+            while waiting:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        waiting = False
+                        return "quit"
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE or event.key == pygame.K_q:
+                            waiting = False
+                            return "quit"
+                        elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                            waiting = False
+                            return "restart"
+                self.ui.clock.tick(30)
+            
+            return "restart"
         else:
-            # Text mode
+            # Text mode - render defeat/victory screen with stats
             os.system("clear" if os.name == "posix" else "cls")
             
             if result == "victory":
-                print("""
-╔═══════════════════════════════════════════════════════════════════════╗
-║                         VICTORY!                                      ║
-║                                                                       ║
-║  You have escaped the Hole with your life (and treasure)!             ║
-║  The other wizards have fallen and their treasures are yours!         ║
-║                                                                       ║
-║  You emerge from the darkness into the light... a hero!               ║
-║                                                                       ║
-╚═══════════════════════════════════════════════════════════════════════╝
-                """)
+                print(self.text_ui.render_victory_screen(self.state.combat_stats, message))
             else:
-                print("""
-╔═══════════════════════════════════════════════════════════════════════╗
-║                         DEFEAT!                                       ║
-║                                                                       ║
-║  You have fallen in the Hole. Your adventure has ended...             ║
-║  Perhaps another wizard will be more successful.                      ║
-║                                                                       ║
-║  Your remains will rest in the darkness forever...                    ║
-║                                                                       ║
-╚═══════════════════════════════════════════════════════════════════════╝
-                """)
+                print(self.text_ui.render_defeat_screen(self.state.combat_stats, message))
             
-            print("\nFinal Stats:")
-            print(f"  Level: {self.state.player.level}")
-            print(f"  XP: {self.state.player.xp}")
-            print(f"  Items: {len(self.state.player.inventory)}")
+            # Wait for user input: Enter to restart, ESC/Q to quit
+            try:
+                user_input = input().strip().lower()
+                if user_input in ['q', 'quit', 'exit']:
+                    return "quit"
+                else:
+                    return "restart"
+            except (KeyboardInterrupt, EOFError):
+                return "quit"
 
     def run(self):
         """Run the main game loop."""

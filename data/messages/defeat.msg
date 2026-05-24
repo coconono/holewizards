@@ -1,1 +1,3 @@
-you lost, try again
+you lost 
+
+try again

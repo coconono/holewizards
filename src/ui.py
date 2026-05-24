@@ -1,5 +1,36 @@
 """UI and display system for Hole Wizards game."""
 
+# Event type to color name mapping
+EVENT_TYPES = {
+    'combat_dealt': 'green',
+    'combat_taken': 'red',
+    'healing': 'blue',
+    'loot': 'yellow',
+    'status': 'magenta',
+    'system': 'gray',
+    'movement': 'cyan',
+    'victory': 'bright_green',
+    'defeat': 'bright_red',
+    'default': 'white'
+}
+
+# ANSI color codes for terminal rendering
+ANSI_COLORS = {
+    'green': '\033[92m',
+    'red': '\033[91m',
+    'blue': '\033[94m',
+    'yellow': '\033[93m',
+    'magenta': '\033[95m',
+    'gray': '\033[90m',
+    'cyan': '\033[96m',
+    'bright_green': '\033[1;92m',
+    'bright_red': '\033[1;91m',
+    'white': '\033[97m',
+    'reset': '\033[0m',
+    'underline': '\033[4m',
+    'underline_off': '\033[24m'
+}
+
 
 class UI:
     """Handles all UI display and rendering."""
@@ -11,16 +42,64 @@ class UI:
         self.log_messages = []
         self.max_log_lines = 10
         self.current_stats_page = "player"  # Track which stats page is displayed
+        self.player_name = None  # Track player name for underlining
+        self.enemy_names = []  # Track enemy names for underlining
 
-    def add_log_message(self, message):
-        """Add a message to the game log."""
-        self.log_messages.append(message)
+    def add_log_message(self, message, event_type="default"):
+        """Add a message to the game log with optional event type for coloring.
+        
+        Args:
+            message: The log message text
+            event_type: Event category for color coding (default: "default")
+        """
+        # Store message with its event type
+        self.log_messages.append({'text': message, 'event_type': event_type})
         if len(self.log_messages) > self.max_log_lines:
             self.log_messages.pop(0)
 
     def clear_log(self):
         """Clear all log messages."""
         self.log_messages = []
+    
+    def set_entity_names(self, player_name, enemy_names):
+        """Set entity names for log message formatting.
+        
+        Args:
+            player_name: Name of the player
+            enemy_names: List of enemy names currently in the game
+        """
+        self.player_name = player_name
+        self.enemy_names = enemy_names
+    
+    def _format_entity_names(self, message):
+        """Apply underline formatting to entity names in a message.
+        
+        Args:
+            message: The log message text
+            
+        Returns:
+            Message with entity names underlined
+        """
+        formatted = message
+        underline = ANSI_COLORS['underline']
+        underline_off = ANSI_COLORS['underline_off']
+        
+        # Underline player name
+        if self.player_name and self.player_name in formatted:
+            formatted = formatted.replace(
+                self.player_name,
+                f"{underline}{self.player_name}{underline_off}"
+            )
+        
+        # Underline enemy names
+        for enemy_name in self.enemy_names:
+            if enemy_name in formatted:
+                formatted = formatted.replace(
+                    enemy_name,
+                    f"{underline}{enemy_name}{underline_off}"
+                )
+        
+        return formatted
 
     def render_player_stats(self, player):
         """Render player stats page."""
@@ -134,23 +213,44 @@ class UI:
         return padded_lines
 
     def render_log(self, width):
-        """Render the game log."""
+        """Render the game log with color coding."""
         lines = ["─" * width]
-        for msg in self.log_messages[-self.max_log_lines:]:
-            # Wrap long messages
-            if len(msg) > width - 2:
-                words = msg.split()
+        for msg_data in self.log_messages[-self.max_log_lines:]:
+            # Handle both old string format and new dict format for backward compatibility
+            if isinstance(msg_data, dict):
+                msg = msg_data['text']
+                event_type = msg_data.get('event_type', 'default')
+            else:
+                msg = msg_data
+                event_type = 'default'
+            
+            # Get color for this event type
+            color_name = EVENT_TYPES.get(event_type, 'white')
+            color_code = ANSI_COLORS.get(color_name, ANSI_COLORS['white'])
+            reset_code = ANSI_COLORS['reset']
+            
+            # Format entity names (underline)
+            formatted_msg = self._format_entity_names(msg)
+            
+            # Apply color to message
+            colored_msg = f"{color_code}{formatted_msg}{reset_code}"
+            
+            # Wrap long messages (account for ANSI codes in length calculation)
+            # Strip ANSI codes when calculating display length
+            display_msg = msg  # Use original msg for length calculation
+            if len(display_msg) > width - 2:
+                words = display_msg.split()
                 current_line = ""
                 for word in words:
                     if len(current_line) + len(word) + 1 > width - 2:
-                        lines.append(current_line)
+                        lines.append(f"{color_code}{current_line}{reset_code}")
                         current_line = word
                     else:
                         current_line += " " + word if current_line else word
                 if current_line:
-                    lines.append(current_line)
+                    lines.append(f"{color_code}{current_line}{reset_code}")
             else:
-                lines.append(msg)
+                lines.append(colored_msg)
         
         return lines[-self.max_log_lines:]
 
@@ -278,3 +378,87 @@ class UI:
 ╚═══════════════════════════════════════════════════════════════════════╝
         """
         return legend_text
+    
+    def render_defeat_screen(self, combat_stats, message=None):
+        """Render the defeat screen with performance summary.
+        
+        Args:
+            combat_stats: Dictionary of combat statistics
+            message: Optional message to display (from defeat.msg)
+        """
+        killing_blow = combat_stats.get('killing_blow')
+        if killing_blow:
+            killer = killing_blow['attacker']
+            damage = killing_blow['damage']
+            death_message = f"You were slain by {killer} with a {damage} damage attack!"
+        else:
+            death_message = "You were defeated!"
+        
+        # Add custom message if provided
+        message_section = ""
+        if message:
+            message_section = f"\n{ANSI_COLORS['white']}{message}{ANSI_COLORS['reset']}\n"
+        
+        screen = f"""
+{ANSI_COLORS['bright_red']}╔════════════════════════════════════════════════════════════════════╗
+║                  GAME OVER - DEFEATED                               ║
+╚════════════════════════════════════════════════════════════════════╝{ANSI_COLORS['reset']}
+
+{ANSI_COLORS['red']}{death_message}{ANSI_COLORS['reset']}{message_section}
+
+{ANSI_COLORS['yellow']}Performance Summary:{ANSI_COLORS['reset']}
+{ANSI_COLORS['gray']}────────────────────{ANSI_COLORS['reset']}
+{ANSI_COLORS['green']}Damage Dealt:{ANSI_COLORS['reset']}      {combat_stats.get('total_damage_dealt', 0)}
+{ANSI_COLORS['red']}Damage Taken:{ANSI_COLORS['reset']}      {combat_stats.get('total_damage_taken', 0)}
+{ANSI_COLORS['cyan']}Monsters Defeated:{ANSI_COLORS['reset']} {combat_stats.get('monsters_defeated', 0)}
+{ANSI_COLORS['blue']}Healing Used:{ANSI_COLORS['reset']}      {combat_stats.get('healing_used', 0)} HP
+{ANSI_COLORS['yellow']}Items Collected:{ANSI_COLORS['reset']}  {combat_stats.get('items_collected', 0)}
+{ANSI_COLORS['magenta']}Turns Survived:{ANSI_COLORS['reset']}    {combat_stats.get('turns_elapsed', 0)}
+{ANSI_COLORS['gray']}Attacks Made:{ANSI_COLORS['reset']}      {combat_stats.get('attacks_made', 0)}
+{ANSI_COLORS['gray']}Chests Opened:{ANSI_COLORS['reset']}     {combat_stats.get('chests_opened', 0)}
+
+{ANSI_COLORS['gray']}[Press Enter to restart | ESC/Q to quit]{ANSI_COLORS['reset']}
+"""
+        return screen
+    
+    def render_victory_screen(self, combat_stats, message=None):
+        """Render the victory screen with performance summary.
+        
+        Args:
+            combat_stats: Dictionary of combat statistics
+            message: Optional message to display (from victory.msg)
+        """
+        last_attack = combat_stats.get('last_attack_dealt')
+        if last_attack:
+            target = last_attack['target']
+            damage = last_attack['damage']
+            victory_message = f"You defeated {target} with a devastating {damage} damage blow!"
+        else:
+            victory_message = "You escaped the Hole!"
+        
+        # Add custom message if provided
+        message_section = ""
+        if message:
+            message_section = f"\n{ANSI_COLORS['white']}{message}{ANSI_COLORS['reset']}\n"
+        
+        screen = f"""
+{ANSI_COLORS['bright_green']}╔════════════════════════════════════════════════════════════════════╗
+║                    VICTORY - ESCAPED!                               ║
+╚════════════════════════════════════════════════════════════════════╝{ANSI_COLORS['reset']}
+
+{ANSI_COLORS['green']}{victory_message}{ANSI_COLORS['reset']}{message_section}
+
+{ANSI_COLORS['yellow']}Performance Summary:{ANSI_COLORS['reset']}
+{ANSI_COLORS['gray']}────────────────────{ANSI_COLORS['reset']}
+{ANSI_COLORS['green']}Damage Dealt:{ANSI_COLORS['reset']}      {combat_stats.get('total_damage_dealt', 0)}
+{ANSI_COLORS['red']}Damage Taken:{ANSI_COLORS['reset']}      {combat_stats.get('total_damage_taken', 0)}
+{ANSI_COLORS['cyan']}Monsters Defeated:{ANSI_COLORS['reset']} {combat_stats.get('monsters_defeated', 0)}
+{ANSI_COLORS['blue']}Healing Used:{ANSI_COLORS['reset']}      {combat_stats.get('healing_used', 0)} HP
+{ANSI_COLORS['yellow']}Items Collected:{ANSI_COLORS['reset']}  {combat_stats.get('items_collected', 0)}
+{ANSI_COLORS['magenta']}Total Turns:{ANSI_COLORS['reset']}       {combat_stats.get('turns_elapsed', 0)}
+{ANSI_COLORS['gray']}Attacks Made:{ANSI_COLORS['reset']}      {combat_stats.get('attacks_made', 0)}
+{ANSI_COLORS['gray']}Chests Opened:{ANSI_COLORS['reset']}     {combat_stats.get('chests_opened', 0)}
+
+{ANSI_COLORS['gray']}[Press Enter to restart | ESC/Q to quit]{ANSI_COLORS['reset']}
+"""
+        return screen

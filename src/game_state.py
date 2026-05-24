@@ -33,6 +33,24 @@ class GameState:
         self.loot_items = []  # Items available in current loot pile
         self.current_loot_enemy = None  # Enemy whose loot is being viewed
         self.chests = {}  # Dictionary of chest locations {(x, y): [items]}
+        
+        # Combat statistics tracking
+        self.combat_stats = {
+            'total_damage_dealt': 0,
+            'total_damage_taken': 0,
+            'monsters_defeated': 0,
+            'healing_used': 0,
+            'items_collected': 0,
+            'turns_elapsed': 0,
+            'attacks_made': 0,
+            'attacks_received': 0,
+            'chests_opened': 0,
+            'spells_cast': 0,
+            'last_attack_dealt': None,  # {"attacker": name, "target": name, "damage": X}
+            'last_attack_taken': None,  # {"attacker": name, "target": name, "damage": X}
+            'killing_blow': None        # Same format as last_attack
+        }
+        
         self._initialize_game()
 
     def _initialize_game(self):
@@ -285,6 +303,8 @@ class GameState:
                 
                 self.player.add_to_inventory(item)
                 self.map.remove_item_at(item, px, py)
+                # Track item collection
+                self.combat_stats['items_collected'] += 1
                 return True, f"Took {item.name}"
         
         return False, f"Item '{item_name}' not found"
@@ -326,7 +346,17 @@ class GameState:
             return False, f"Item '{item_name}' not in inventory"
         
         if item.item_type == "consumable":
+            # Track HP/Mana before use to measure healing
+            hp_before = self.player.hp
+            mana_before = self.player.mana
+            
             item.apply_use_effect(self.player)
+            
+            # Track healing
+            hp_restored = self.player.hp - hp_before
+            mana_restored = self.player.mana - mana_before
+            if hp_restored > 0:
+                self.combat_stats['healing_used'] += hp_restored
             
             # For stackable items, only remove one from the stack
             if hasattr(item, 'remove_quantity'):
@@ -352,6 +382,9 @@ class GameState:
             # Apply spell effects
             item.apply_use_effect(self.player)
             
+            # Track spell cast
+            self.combat_stats['spells_cast'] += 1
+            
             return True, f"Cast {item.name} (cost {mana_cost} mana)"
         
         return False, "Cannot use this item"
@@ -368,9 +401,20 @@ class GameState:
         damage = self.player.get_attack_damage()
         enemy.take_damage(damage)
         
+        # Track combat stats
+        self.combat_stats['attacks_made'] += 1
+        self.combat_stats['total_damage_dealt'] += damage
+        self.combat_stats['last_attack_dealt'] = {
+            'attacker': 'You',
+            'target': enemy.name,
+            'damage': damage
+        }
+        
         if enemy.alive:
             return True, f"Attacked {enemy.name} for {damage} damage! ({enemy.hp} HP remaining)"
         else:
+            # Track monster defeat
+            self.combat_stats['monsters_defeated'] += 1
             # Collect all items from inventory (equipped items are already in inventory)
             loot_items = list(enemy.inventory)
             
@@ -415,9 +459,20 @@ class GameState:
         damage = self.player.get_attack_damage()
         target_enemy.take_damage(damage)
         
+        # Track combat stats
+        self.combat_stats['attacks_made'] += 1
+        self.combat_stats['total_damage_dealt'] += damage
+        self.combat_stats['last_attack_dealt'] = {
+            'attacker': 'You',
+            'target': target_enemy.name,
+            'damage': damage
+        }
+        
         if target_enemy.alive:
             return True, f"Attacked {target_enemy.name} for {damage} damage! ({target_enemy.hp} HP remaining)"
         else:
+            # Track monster defeat
+            self.combat_stats['monsters_defeated'] += 1
             # Collect all items from inventory (equipped items are already in inventory)
             loot_items = list(target_enemy.inventory)
             
@@ -580,6 +635,8 @@ class GameState:
                 if (nx, ny) in self.chests:
                     self.chest_items = self.chests[(nx, ny)]
                     self.current_stats_page = "chest"
+                    # Track chest opened
+                    self.combat_stats['chests_opened'] += 1
                     return True, f"Opened chest at ({nx}, {ny})"
         
         return False, "No chest nearby"
@@ -603,15 +660,21 @@ class GameState:
                             overflow = inv_item.add_quantity(item.quantity)
                             if overflow > 0:
                                 item.quantity = overflow
+                                # Track item collection
+                                self.combat_stats['items_collected'] += 1
                                 return True, f"Took {item.base_name} (now carrying {inv_item.quantity})"
                             else:
                                 self.loot_items.remove(item)
+                                # Track item collection
+                                self.combat_stats['items_collected'] += 1
                                 return True, f"Took {item.base_name} (now carrying {inv_item.quantity})"
                     # No existing stack, add as new item
                     if len(self.player.inventory) >= self.player.max_inventory_size:
                         return False, "Inventory is full"
                     self.player.add_to_inventory(item)
                     self.loot_items.remove(item)
+                    # Track item collection
+                    self.combat_stats['items_collected'] += 1
                     return True, f"Took {item.name}"
                 else:
                     if len(self.player.inventory) >= self.player.max_inventory_size:
@@ -625,9 +688,12 @@ class GameState:
                     
                     self.player.add_to_inventory(item)
                     self.loot_items.remove(item)
+                    # Track item collection
+                    self.combat_stats['items_collected'] += 1
                     return True, f"Took {item.name}"
         
-        return False, f"Item '{item_name}' not in loot"
+        # Item not found
+        return False, f"Item '{item_name}' not found in loot pile"
 
     def take_chest_item(self, item_name):
         """Take an item from the current chest."""
@@ -641,14 +707,20 @@ class GameState:
                             overflow = inv_item.add_quantity(item.quantity)
                             if overflow > 0:
                                 item.quantity = overflow
+                                # Track item collection
+                                self.combat_stats['items_collected'] += 1
                                 return True, f"Took {item.base_name} (now carrying {inv_item.quantity})"
                             else:
                                 self.chest_items.remove(item)
+                                # Track item collection
+                                self.combat_stats['items_collected'] += 1
                                 return True, f"Took {item.base_name} (now carrying {inv_item.quantity})"
                     if len(self.player.inventory) >= self.player.max_inventory_size:
                         return False, "Inventory is full"
                     self.player.add_to_inventory(item)
                     self.chest_items.remove(item)
+                    # Track item collection
+                    self.combat_stats['items_collected'] += 1
                     return True, f"Took {item.name}"
                 else:
                     if len(self.player.inventory) >= self.player.max_inventory_size:
@@ -662,6 +734,8 @@ class GameState:
                     
                     self.player.add_to_inventory(item)
                     self.chest_items.remove(item)
+                    # Track item collection
+                    self.combat_stats['items_collected'] += 1
                     return True, f"Took {item.name}"
         
         return False, f"Item '{item_name}' not in chest"
@@ -697,10 +771,25 @@ class GameState:
                 self.player.take_damage(damage)
                 enemy.record_damage_dealt(damage)
                 enemy.last_action = 4
+                                # Track combat stats
+                self.combat_stats['attacks_received'] += 1
+                self.combat_stats['total_damage_taken'] += damage
+                self.combat_stats['last_attack_taken'] = {
+                    'attacker': enemy.name,
+                    'target': 'You',
+                    'damage': damage
+                }
                 
-                # Log the attack
+                # Check if this was a killing blow
+                if not self.player.alive:
+                    self.combat_stats['killing_blow'] = {
+                        'attacker': enemy.name,
+                        'target': 'You',
+                        'damage': damage
+                    }
+                                # Log the attack
                 if hasattr(self, 'ui') and self.ui:
-                    self.ui.add_log_message(f"{enemy.name} attacks you for {damage} damage!")
+                    self.ui.add_log_message(f"{enemy.name} attacks you for {damage} damage!", "combat_taken")
         elif action == 5:  # Defend
             enemy.defending = True
             enemy.last_action = 5
@@ -762,25 +851,25 @@ class GameState:
                     if target.alive:
                         if repositioned:
                             if hasattr(self, 'ui') and self.ui:
-                                self.ui.add_log_message(f"{enemy.name} grabs you and suplexes you! ({damage} damage)")
-                                self.ui.add_log_message("You are repositioned!")
+                                self.ui.add_log_message(f"{enemy.name} grabs you and suplexes you! ({damage} damage)", "combat_taken")
+                                self.ui.add_log_message("You are repositioned!", "status")
                         else:
                             if hasattr(self, 'ui') and self.ui:
-                                self.ui.add_log_message(f"{enemy.name} suplexes you against the wall! ({damage} damage)")
+                                self.ui.add_log_message(f"{enemy.name} suplexes you against the wall! ({damage} damage)", "combat_taken")
                     # Player death is handled elsewhere
                 else:  # enemy target
                     if target.alive:
                         if repositioned:
                             if hasattr(self, 'ui') and self.ui:
-                                self.ui.add_log_message(f"{enemy.name} grabs {target.name} and suplexes them! ({damage} damage)")
-                                self.ui.add_log_message(f"{target.name} is repositioned!")
+                                self.ui.add_log_message(f"{enemy.name} grabs {target.name} and suplexes them! ({damage} damage)", "status")
+                                self.ui.add_log_message(f"{target.name} is repositioned!", "status")
                         else:
                             if hasattr(self, 'ui') and self.ui:
-                                self.ui.add_log_message(f"{enemy.name} suplexes {target.name} against the wall! ({damage} damage)")
+                                self.ui.add_log_message(f"{enemy.name} suplexes {target.name} against the wall! ({damage} damage)", "status")
                     else:
                         # Target enemy was defeated
                         if hasattr(self, 'ui') and self.ui:
-                            self.ui.add_log_message(f"{enemy.name}'s suplex defeats {target.name}!")
+                            self.ui.add_log_message(f"{enemy.name}'s suplex defeats {target.name}!", "victory")
                         
                         # Handle enemy death: create loot, remove from game
                         loot_items = list(target.inventory)

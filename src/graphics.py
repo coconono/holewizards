@@ -8,6 +8,20 @@ from configparser import ConfigParser
 from pathlib import Path
 from resource_path import get_resource_path, get_data_path
 
+# Event type to color name mapping (same as ui.py)
+EVENT_TYPES = {
+    'combat_dealt': 'green',
+    'combat_taken': 'red',
+    'healing': 'blue',
+    'loot': 'yellow',
+    'status': 'magenta',
+    'system': 'gray',
+    'movement': 'cyan',
+    'victory': 'bright_green',
+    'defeat': 'bright_red',
+    'default': 'white'
+}
+
 # Suppress pygame.font circular import warnings
 warnings.filterwarnings('ignore', category=RuntimeWarning, module='pygame.font')
 
@@ -316,6 +330,20 @@ class GraphicalUI:
         self.MAGENTA = (255, 100, 255)
         self.ORANGE = (255, 200, 100)
         
+        # Log message colors by event type
+        self.LOG_COLORS = {
+            'combat_dealt': (0, 255, 0),       # Green
+            'combat_taken': (255, 0, 0),       # Red
+            'healing': (100, 150, 255),        # Blue
+            'loot': (255, 255, 0),             # Yellow
+            'status': (255, 0, 255),           # Magenta
+            'system': (150, 150, 150),         # Gray
+            'movement': (0, 255, 255),         # Cyan
+            'victory': (150, 255, 150),        # Bright green
+            'defeat': (255, 100, 100),         # Bright red
+            'default': (200, 200, 200)         # Light gray
+        }
+        
         # Layout constants
         self.map_x = 20
         self.map_y = 20
@@ -335,16 +363,87 @@ class GraphicalUI:
         self.max_log_lines = 15
         self.showing_full_screen = None  # "help", "legend", or None
         self.full_screen_text = None  # Text to display for help/legend
+        self.player_name = None  # Track player name for bold formatting
+        self.enemy_names = []  # Track enemy names for bold formatting
 
-    def add_log_message(self, message):
-        """Add a message to the game log."""
-        self.log_messages.append(message)
+    def add_log_message(self, message, event_type="default"):
+        """Add a message to the game log with optional event type for coloring.
+        
+        Args:
+            message: The log message text
+            event_type: Event category for color coding (default: "default")
+        """
+        # Store message with its event type
+        self.log_messages.append({'text': message, 'event_type': event_type})
         if len(self.log_messages) > self.max_log_lines:
             self.log_messages.pop(0)
 
     def clear_log(self):
         """Clear all log messages."""
         self.log_messages = []
+    
+    def set_entity_names(self, player_name, enemy_names):
+        """Set entity names for log message formatting.
+        
+        Args:
+            player_name: Name of the player
+            enemy_names: List of enemy names currently in the game
+        """
+        self.player_name = player_name
+        self.enemy_names = enemy_names
+    
+    def _split_message_by_entities(self, message):
+        """Split a message into segments, marking which are entity names.
+        
+        Args:
+            message: The log message text
+            
+        Returns:
+            List of tuples: (text, is_entity_name)
+        """
+        # Collect all entity names to look for
+        entity_names = []
+        if self.player_name:
+            entity_names.append(self.player_name)
+        entity_names.extend(self.enemy_names)
+        
+        if not entity_names:
+            return [(message, False)]
+        
+        # Sort by length (longest first) to avoid partial matches
+        entity_names.sort(key=len, reverse=True)
+        
+        segments = []
+        remaining = message
+        
+        while remaining:
+            # Find the earliest entity name in remaining text
+            earliest_pos = len(remaining)
+            earliest_name = None
+            
+            for name in entity_names:
+                pos = remaining.find(name)
+                if pos != -1 and pos < earliest_pos:
+                    earliest_pos = pos
+                    earliest_name = name
+            
+            if earliest_name is None:
+                # No more entity names, rest is normal text
+                if remaining:
+                    segments.append((remaining, False))
+                break
+            else:
+                # Add text before entity name
+                if earliest_pos > 0:
+                    segments.append((remaining[:earliest_pos], False))
+                
+                # Add entity name
+                segments.append((earliest_name, True))
+                
+                # Continue with remaining text
+                remaining = remaining[earliest_pos + len(earliest_name):]
+        
+        return segments
 
     def render_text(self, text, font, color):
         """Safely render text, handling different font types (pygame, PIL, None)."""
@@ -907,15 +1006,56 @@ class GraphicalUI:
         
         # Log messages
         y_offset = self.log_y + 10
-        for message in self.log_messages[-self.max_log_lines:]:
+        for msg_data in self.log_messages[-self.max_log_lines:]:
+            # Handle both old string format and new dict format for backward compatibility
+            if isinstance(msg_data, dict):
+                message = msg_data['text']
+                event_type = msg_data.get('event_type', 'default')
+            else:
+                message = msg_data
+                event_type = 'default'
+            
+            # Get color for this event type (direct lookup, no need for EVENT_TYPES in graphics mode)
+            color = self.LOG_COLORS.get(event_type, self.LOG_COLORS['default'])
+            
             lines = self.wrap_text(message, 150)
             for line in lines:
-                if self.font_small:
-                    text = self.render_text(line, self.font_small, self.LIGHT_GRAY)
-                    if text:
-                        self.screen.blit(text, (self.log_x + 10, y_offset))
-                else:
-                    self.draw_simple_text(line, self.log_x + 10, y_offset, self.LIGHT_GRAY)
+                # Split line by entity names for highlighting
+                segments = self._split_message_by_entities(line)
+                
+                x_offset = self.log_x + 10
+                
+                for text, is_entity in segments:
+                    if self.font_small:
+                        # Render text to get its size
+                        text_surface = self.render_text(text, self.font_small, color)
+                        if text_surface:
+                            text_width = text_surface.get_width()
+                            text_height = text_surface.get_height()
+                            
+                            # Draw highlight background for entity names
+                            if is_entity:
+                                # Semi-transparent yellow highlight
+                                highlight_color = (255, 255, 100, 128)  # Yellow with alpha
+                                highlight_rect = pygame.Rect(x_offset - 2, y_offset - 2, text_width + 4, text_height + 4)
+                                s = pygame.Surface((text_width + 4, text_height + 4), pygame.SRCALPHA)
+                                s.fill(highlight_color)
+                                self.screen.blit(s, (x_offset - 2, y_offset - 2))
+                            
+                            # Draw the text
+                            self.screen.blit(text_surface, (x_offset, y_offset))
+                            x_offset += text_width
+                    else:
+                        # Fallback rendering with simple text
+                        if is_entity:
+                            # Draw a simple background box
+                            text_width = len(text) * 6  # Approximate width
+                            pygame.draw.rect(self.screen, (255, 255, 100), 
+                                           (x_offset - 2, y_offset - 2, text_width + 4, 12))
+                        
+                        self.draw_simple_text(text, x_offset, y_offset, color)
+                        x_offset += len(text) * 6  # Approximate advance
+                
                 y_offset += 22
 
     def render_command_input(self):
@@ -1375,6 +1515,196 @@ class GraphicalUI:
     def tick(self, fps=60):
         """Update clock and maintain FPS."""
         self.clock.tick(fps)
+    
+    def render_defeat_screen(self, combat_stats, message=None):
+        """Render the defeat screen with performance summary in graphics mode.
+        
+        Args:
+            combat_stats: Dictionary of combat statistics
+            message: Optional message to display (from defeat.msg)
+        """
+        self.screen.fill(self.BLACK)
+        
+        y_offset = 100
+        
+        # Title
+        title_lines = [
+            "═" * 70,
+            "GAME OVER - DEFEATED".center(70),
+            "═" * 70
+        ]
+        
+        for line in title_lines:
+            if self.font_large:
+                text = self.render_text(line, self.font_large, self.RED)
+                if text:
+                    text_rect = text.get_rect(center=(self.width // 2, y_offset))
+                    self.screen.blit(text, text_rect)
+            y_offset += 40
+        
+        y_offset += 20
+        
+        # Death message
+        killing_blow = combat_stats.get('killing_blow')
+        if killing_blow:
+            killer = killing_blow['attacker']
+            damage = killing_blow['damage']
+            death_message = f"You were slain by {killer} with a {damage} damage attack!"
+        else:
+            death_message = "You were defeated!"
+        
+        if self.font_normal:
+            text = self.render_text(death_message, self.font_normal, self.RED)
+            if text:
+                text_rect = text.get_rect(center=(self.width // 2, y_offset))
+                self.screen.blit(text, text_rect)
+        y_offset += 40
+        
+        # Custom message from defeat.msg (handle multi-line)
+        if message and self.font_normal:
+            for line in message.split('\n'):
+                text = self.render_text(line, self.font_normal, self.WHITE)
+                if text:
+                    text_rect = text.get_rect(center=(self.width // 2, y_offset))
+                    self.screen.blit(text, text_rect)
+                y_offset += 30
+            y_offset += 10
+        
+        y_offset += 20
+        
+        # Performance summary title
+        if self.font_normal:
+            text = self.render_text("Performance Summary:", self.font_normal, self.YELLOW)
+            if text:
+                text_rect = text.get_rect(center=(self.width // 2, y_offset))
+                self.screen.blit(text, text_rect)
+        y_offset += 40
+        
+        # Stats
+        stats_to_display = [
+            (f"Damage Dealt:      {combat_stats.get('total_damage_dealt', 0)}", (0, 255, 0)),
+            (f"Damage Taken:      {combat_stats.get('total_damage_taken', 0)}", (255, 0, 0)),
+            (f"Monsters Defeated: {combat_stats.get('monsters_defeated', 0)}", (0, 255, 255)),
+            (f"Healing Used:      {combat_stats.get('healing_used', 0)} HP", (100, 150, 255)),
+            (f"Items Collected:   {combat_stats.get('items_collected', 0)}", self.YELLOW),
+            (f"Turns Survived:    {combat_stats.get('turns_elapsed', 0)}", self.MAGENTA),
+            (f"Attacks Made:      {combat_stats.get('attacks_made', 0)}", self.LIGHT_GRAY),
+            (f"Chests Opened:     {combat_stats.get('chests_opened', 0)}", self.LIGHT_GRAY),
+        ]
+        
+        for stat_text, color in stats_to_display:
+            if self.font_normal:
+                text = self.render_text(stat_text, self.font_normal, color)
+                if text:
+                    text_rect = text.get_rect(center=(self.width // 2, y_offset))
+                    self.screen.blit(text, text_rect)
+            y_offset += 30
+        
+        y_offset += 40
+        
+        # Exit/Restart prompt
+        if self.font_small:
+            text = self.render_text("[Press Enter to restart | ESC/Q to quit]", self.font_small, self.LIGHT_GRAY)
+            if text:
+                text_rect = text.get_rect(center=(self.width // 2, y_offset))
+                self.screen.blit(text, text_rect)
+        
+        pygame.display.flip()
+    
+    def render_victory_screen(self, combat_stats, message=None):
+        """Render the victory screen with performance summary in graphics mode.
+        
+        Args:
+            combat_stats: Dictionary of combat statistics
+            message: Optional message to display (from victory.msg)
+        """
+        self.screen.fill(self.BLACK)
+        
+        y_offset = 100
+        
+        # Title
+        title_lines = [
+            "═" * 70,
+            "VICTORY - ESCAPED!".center(70),
+            "═" * 70
+        ]
+        
+        for line in title_lines:
+            if self.font_large:
+                text = self.render_text(line, self.font_large, self.BRIGHT_GREEN)
+                if text:
+                    text_rect = text.get_rect(center=(self.width // 2, y_offset))
+                    self.screen.blit(text, text_rect)
+            y_offset += 40
+        
+        y_offset += 20
+        
+        # Victory message
+        last_attack = combat_stats.get('last_attack_dealt')
+        if last_attack:
+            target = last_attack['target']
+            damage = last_attack['damage']
+            victory_message = f"You defeated {target} with a devastating {damage} damage blow!"
+        else:
+            victory_message = "You escaped the Hole!"
+        
+        if self.font_normal:
+            text = self.render_text(victory_message, self.font_normal, self.BRIGHT_GREEN)
+            if text:
+                text_rect = text.get_rect(center=(self.width // 2, y_offset))
+                self.screen.blit(text, text_rect)
+        y_offset += 40
+        
+        # Custom message from victory.msg (handle multi-line)
+        if message and self.font_normal:
+            for line in message.split('\n'):
+                text = self.render_text(line, self.font_normal, self.WHITE)
+                if text:
+                    text_rect = text.get_rect(center=(self.width // 2, y_offset))
+                    self.screen.blit(text, text_rect)
+                y_offset += 30
+            y_offset += 10
+        
+        y_offset += 20
+        
+        # Performance summary title
+        if self.font_normal:
+            text = self.render_text("Performance Summary:", self.font_normal, self.YELLOW)
+            if text:
+                text_rect = text.get_rect(center=(self.width // 2, y_offset))
+                self.screen.blit(text, text_rect)
+        y_offset += 40
+        
+        # Stats
+        stats_to_display = [
+            (f"Damage Dealt:      {combat_stats.get('total_damage_dealt', 0)}", (0, 255, 0)),
+            (f"Damage Taken:      {combat_stats.get('total_damage_taken', 0)}", (255, 0, 0)),
+            (f"Monsters Defeated: {combat_stats.get('monsters_defeated', 0)}", (0, 255, 255)),
+            (f"Healing Used:      {combat_stats.get('healing_used', 0)} HP", (100, 150, 255)),
+            (f"Items Collected:   {combat_stats.get('items_collected', 0)}", self.YELLOW),
+            (f"Total Turns:       {combat_stats.get('turns_elapsed', 0)}", self.MAGENTA),
+            (f"Attacks Made:      {combat_stats.get('attacks_made', 0)}", self.LIGHT_GRAY),
+            (f"Chests Opened:     {combat_stats.get('chests_opened', 0)}", self.LIGHT_GRAY),
+        ]
+        
+        for stat_text, color in stats_to_display:
+            if self.font_normal:
+                text = self.render_text(stat_text, self.font_normal, color)
+                if text:
+                    text_rect = text.get_rect(center=(self.width // 2, y_offset))
+                    self.screen.blit(text, text_rect)
+            y_offset += 30
+        
+        y_offset += 40
+        
+        # Exit/Restart prompt
+        if self.font_small:
+            text = self.render_text("[Press Enter to restart | ESC/Q to quit]", self.font_small, self.LIGHT_GRAY)
+            if text:
+                text_rect = text.get_rect(center=(self.width // 2, y_offset))
+                self.screen.blit(text, text_rect)
+        
+        pygame.display.flip()
 
     def quit(self):
         """Quit pygame."""
