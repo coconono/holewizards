@@ -11,6 +11,7 @@ class CommandParser:
         "show_player_stats": r"^show\s+player\s+stats$",
         "show_enemy_stats": r"^show\s+enemy\s+stats$",
         "show_player_inventory": r"^show\s+player\s+inventory$",
+        "show_loot_named": r"^show\s+(.+?)\s+loot$",
         "show_loot": r"^show\s+loot$",
         "show_chest": r"^show\s+chest$",
         "list_commands": r"^list\s+commands$|^help$",

@@ -421,10 +421,10 @@ class GameState:
             # Create loot bag
             loot_bag = LootBag(enemy.name, loot_items)
             
-            # Place loot bag on map at enemy's position
+            # Place loot bag on map at enemy's position (with spread logic)
             enemy_x = enemy.position["x"]
             enemy_y = enemy.position["y"]
-            self.map.place_item(loot_bag, enemy_x, enemy_y)
+            self.map.place_item(loot_bag, enemy_x, enemy_y, spread_loot=True)
             
             # Remove dead enemy from map and game state
             self.map.remove_enemy(enemy)
@@ -479,10 +479,10 @@ class GameState:
             # Create loot bag
             loot_bag = LootBag(target_enemy.name, loot_items)
             
-            # Place loot bag on map at enemy's position
+            # Place loot bag on map at enemy's position (with spread logic)
             enemy_x = target_enemy.position["x"]
             enemy_y = target_enemy.position["y"]
-            self.map.place_item(loot_bag, enemy_x, enemy_y)
+            self.map.place_item(loot_bag, enemy_x, enemy_y, spread_loot=True)
             
             # Remove dead enemy from map and game state
             self.map.remove_enemy(target_enemy)
@@ -551,10 +551,10 @@ class GameState:
             # Create loot bag
             loot_bag = LootBag(target_enemy.name, loot_items)
             
-            # Place loot bag on map at enemy's position
+            # Place loot bag on map at enemy's position (with spread logic)
             enemy_x = target_enemy.position["x"]
             enemy_y = target_enemy.position["y"]
-            self.map.place_item(loot_bag, enemy_x, enemy_y)
+            self.map.place_item(loot_bag, enemy_x, enemy_y, spread_loot=True)
             
             # Remove dead enemy from map and game state
             self.map.remove_enemy(target_enemy)
@@ -580,8 +580,12 @@ class GameState:
         self.player.defending = True
         return True, "You assume a defensive stance"
 
-    def show_loot(self):
-        """Show loot from a dead enemy at current location or adjacent."""
+    def show_loot(self, owner_name=None):
+        """Show loot from a dead enemy at current location or adjacent.
+        
+        Args:
+            owner_name: Optional enemy name to filter loot bags by owner
+        """
         px = self.player.position["x"]
         py = self.player.position["y"]
         
@@ -593,6 +597,10 @@ class GameState:
         items = self.map.get_items_at(px, py)
         for item in items:
             if item.item_type == "bag" and hasattr(item, 'contents'):
+                # If owner_name specified, filter by enemy_name
+                if owner_name and hasattr(item, 'enemy_name'):
+                    if item.enemy_name.lower() != owner_name.lower():
+                        continue
                 loot_items = item.contents
                 loot_enemy = item.enemy_name
                 break
@@ -608,6 +616,10 @@ class GameState:
                     items = self.map.get_items_at(nx, ny)
                     for item in items:
                         if item.item_type == "bag" and hasattr(item, 'contents'):
+                            # If owner_name specified, filter by enemy_name
+                            if owner_name and hasattr(item, 'enemy_name'):
+                                if item.enemy_name.lower() != owner_name.lower():
+                                    continue
                             loot_items = item.contents
                             loot_enemy = item.enemy_name
                             break
@@ -619,7 +631,18 @@ class GameState:
         self.loot_items = loot_items
         self.current_loot_enemy = loot_enemy
         self.current_stats_page = "loot"
-        return bool(loot_items), "Loot found" if loot_items else "No loot here"
+        
+        # Build appropriate message
+        if loot_items:
+            if owner_name:
+                return True, f"Found {loot_enemy}'s loot bag"
+            else:
+                return True, "Loot found"
+        else:
+            if owner_name:
+                return False, f"No loot bag from '{owner_name}' found nearby"
+            else:
+                return False, "No loot here"
 
     def show_chest(self):
         """Show contents of an adjacent chest."""

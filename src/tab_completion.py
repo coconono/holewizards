@@ -70,6 +70,10 @@ class TabCompletion:
         
         # First, try to match commands (including multi-word commands)
         all_commands = self._get_all_commands()
+        # Add dynamic commands for nearby loot bags
+        dynamic_commands = self._get_dynamic_loot_commands()
+        all_commands.extend(dynamic_commands)
+        
         partial_lower = partial_input.lower()
         
         # Check if input matches any command prefix
@@ -177,6 +181,44 @@ class TabCompletion:
             "attack",
             "suplex",
         ]
+        return commands
+
+    def _get_dynamic_loot_commands(self):
+        """Get dynamic commands for nearby loot bags.
+        
+        Returns:
+            List of dynamic command strings like "show Alice loot"
+        """
+        if not self.game_state:
+            return []
+        
+        commands = []
+        
+        # Get loot bags nearby (current position and adjacent)
+        px = self.game_state.player.position["x"]
+        py = self.game_state.player.position["y"]
+        
+        loot_owners = set()
+        
+        # Check current position
+        for item in self.game_state.map.get_items_at(px, py):
+            if item.item_type == "bag" and hasattr(item, 'enemy_name'):
+                loot_owners.add(item.enemy_name)
+        
+        # Check adjacent tiles
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                if dx == 0 and dy == 0:
+                    continue
+                nx, ny = px + dx, py + dy
+                for item in self.game_state.map.get_items_at(nx, ny):
+                    if item.item_type == "bag" and hasattr(item, 'enemy_name'):
+                        loot_owners.add(item.enemy_name)
+        
+        # Generate "show [owner] loot" commands
+        for owner in loot_owners:
+            commands.append(f"show {owner} loot")
+        
         return commands
 
     def _complete_item_from_ground(self, partial_item):

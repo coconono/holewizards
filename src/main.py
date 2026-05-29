@@ -135,6 +135,10 @@ class Game:
             self.state.current_enemy = None
             self.ui.add_log_message(f"Showing inventory ({len(self.state.player.inventory)} items)", "system")
 
+        elif cmd_type == "show_loot_named":
+            success, message = self.state.show_loot(owner_name=args)
+            self.ui.add_log_message(message, "loot")
+
         elif cmd_type == "show_loot":
             success, message = self.state.show_loot()
             self.ui.add_log_message(message, "loot")

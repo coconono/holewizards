@@ -187,12 +187,67 @@ class Map:
                 return True
         return False
 
-    def place_item(self, item, x, y):
-        """Place an item on the map."""
+    def find_adjacent_free_tile(self, x, y, max_radius=2):
+        """Find the nearest free tile adjacent to (x, y).
+        
+        Args:
+            x, y: Starting position
+            max_radius: Maximum search radius
+        
+        Returns:
+            (x, y) tuple of free tile, or None if none found
+        """
+        # Check if starting position is free
         if self.is_valid_position(x, y):
-            self.tiles[y][x].items.append(item)
-            return True
-        return False
+            tile = self.tiles[y][x]
+            if tile.is_walkable() and not tile.items:
+                return (x, y)
+        
+        # Search in expanding circles
+        for radius in range(1, max_radius + 1):
+            for dx in range(-radius, radius + 1):
+                for dy in range(-radius, radius + 1):
+                    # Only check tiles at the current radius (outer ring)
+                    if abs(dx) != radius and abs(dy) != radius:
+                        continue
+                    
+                    nx, ny = x + dx, y + dy
+                    if self.is_valid_position(nx, ny):
+                        tile = self.tiles[ny][nx]
+                        if tile.is_walkable() and not tile.items:
+                            return (nx, ny)
+        
+        return None
+
+    def place_item(self, item, x, y, spread_loot=False):
+        """Place an item on the map.
+        
+        Args:
+            item: The item to place
+            x, y: The target position
+            spread_loot: If True and position has loot bags, find adjacent tile
+        
+        Returns:
+            True if item was placed successfully, False otherwise
+        """
+        if not self.is_valid_position(x, y):
+            return False
+        
+        # Check if we should spread loot bags
+        if spread_loot and item.item_type == "bag":
+            tile = self.tiles[y][x]
+            # Check if there's already a loot bag at this position
+            has_loot_bag = any(i.item_type == "bag" for i in tile.items)
+            
+            if has_loot_bag:
+                # Find adjacent free tile
+                free_tile = self.find_adjacent_free_tile(x, y)
+                if free_tile:
+                    x, y = free_tile
+                # If no free tile found, place on same tile anyway
+        
+        self.tiles[y][x].items.append(item)
+        return True
 
     def get_items_at(self, x, y):
         """Get items at a position."""
