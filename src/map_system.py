@@ -27,7 +27,8 @@ class MapTile:
 
     def is_walkable(self):
         """Check if this tile can be walked on."""
-        if self.tile_type in ["wall", "door_closed"]:
+        # Chests are immovable obstacles
+        if self.tile_type in ["wall", "door_closed", "chest"]:
             return False
         return True
 
@@ -139,14 +140,23 @@ class Map:
                 return True
         return False
 
-    def move_player(self, player, dx, dy):
-        """Move player on the map."""
+    def move_player(self, player, dx, dy, ui=None):
+        """Move player on the map.
+        
+        Args:
+            player: Player object
+            dx, dy: Direction to move
+            ui: UI object for logging (optional)
+        """
         old_x = player.position["x"]
         old_y = player.position["y"]
         new_x = old_x + dx
         new_y = old_y + dy
 
         if self.is_valid_position(new_x, new_y):
+            # Push loot bags if present at target position
+            self.push_loot_bag(new_x, new_y, dx, dy, ui)
+            
             # Check if walkable AND no collision with enemies
             if self.is_walkable(new_x, new_y):
                 # Remove player from old position
@@ -166,14 +176,23 @@ class Map:
                 return True
         return False
 
-    def move_enemy(self, enemy, dx, dy):
-        """Move an enemy on the map."""
+    def move_enemy(self, enemy, dx, dy, ui=None):
+        """Move an enemy on the map.
+        
+        Args:
+            enemy: Enemy object
+            dx, dy: Direction to move
+            ui: UI object for logging (optional)
+        """
         old_x = enemy.position["x"]
         old_y = enemy.position["y"]
         new_x = old_x + dx
         new_y = old_y + dy
 
         if self.is_valid_position(new_x, new_y):
+            # Push loot bags if present at target position
+            self.push_loot_bag(new_x, new_y, dx, dy, ui)
+            
             # Check if walkable AND no collision with player or other enemies
             if self.is_walkable(new_x, new_y):
                 # Remove enemy from old position
@@ -247,6 +266,66 @@ class Map:
                 # If no free tile found, place on same tile anyway
         
         self.tiles[y][x].items.append(item)
+        return True
+    
+    def push_loot_bag(self, x, y, dx, dy, ui=None):
+        """Push loot bags at a position in a direction.
+        
+        Args:
+            x, y: Position with loot bags
+            dx, dy: Direction to push
+            ui: UI object for logging messages (optional)
+        
+        Returns:
+            bool: True if bags were pushed/destroyed, False if no bags
+        """
+        if not self.is_valid_position(x, y):
+            return False
+        
+        tile = self.tiles[y][x]
+        loot_bags = [item for item in tile.items if item.item_type == "bag"]
+        
+        if not loot_bags:
+            return False
+        
+        # Try to push in the direction of movement
+        target_x, target_y = x + dx, y + dy
+        
+        # Check if target position is valid and walkable
+        if self.is_valid_position(target_x, target_y):
+            target_tile = self.tiles[target_y][target_x]
+            if target_tile.is_walkable() and not target_tile.player and not target_tile.enemy:
+                # Push bags to target position
+                for bag in loot_bags:
+                    tile.items.remove(bag)
+                    target_tile.items.append(bag)
+                if ui:
+                    ui.add_log_message("Loot bag pushed", "movement")
+                return True
+        
+        # If target is blocked, try to find any adjacent open tile
+        for check_dx in [-1, 0, 1]:
+            for check_dy in [-1, 0, 1]:
+                if check_dx == 0 and check_dy == 0:
+                    continue
+                
+                alt_x, alt_y = x + check_dx, y + check_dy
+                if self.is_valid_position(alt_x, alt_y):
+                    alt_tile = self.tiles[alt_y][alt_x]
+                    if alt_tile.is_walkable() and not alt_tile.player and not alt_tile.enemy:
+                        # Push bags to alternate position
+                        for bag in loot_bags:
+                            tile.items.remove(bag)
+                            alt_tile.items.append(bag)
+                        if ui:
+                            ui.add_log_message("Loot bag pushed aside", "movement")
+                        return True
+        
+        # No available tiles - destroy the loot bags
+        for bag in loot_bags:
+            tile.items.remove(bag)
+        if ui:
+            ui.add_log_message("The loot bag was crushed! Contents lost.", "loot")
         return True
 
     def get_items_at(self, x, y):

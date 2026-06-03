@@ -14,6 +14,7 @@ Yes there is a manifesto but for the life of me I cannot find my beret.
 
 - **Graphics Mode** - 1400x900 pixel window with custom ASCII art font rendering
 - **Text Mode** - Traditional terminal-based interface (`--text` flag)
+- **Real-Time Mode** - Toggle between turn-based and real-time WASD controls (type `realtime`)
 - **Tab Completion** - Command and target name completion in both graphics and text modes
 - **Dynamic Map Display** - Shows explored areas, auto-aligns to screen edges
 - **Stats System** - Track HP, Mana, XP, Level with multiple display pages

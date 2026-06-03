@@ -18,6 +18,7 @@ class CommandParser:
         "legend": r"^legend$",
         "quit": r"^quit$",
         "restart": r"^restart$",
+        "realtime": r"^realtime$",
         "take": r"^take\s+['\"]?(.+?)['\"]?$",
         "drop": r"^drop\s+['\"]?(.+?)['\"]?$",
         "equip": r"^equip\s+['\"]?(.+?)['\"]?$",
@@ -96,6 +97,7 @@ STATS & INFO:
   legend                 - Show map legend
   quit                   - Quit the game
   restart                - Restart the game
+  realtime               - Toggle real-time mode (WASD controls)
 
 MOVEMENT:
   move up    - Move up

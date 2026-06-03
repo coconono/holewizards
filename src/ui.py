@@ -258,7 +258,7 @@ class UI:
         """Render the command prompt."""
         return "> "
 
-    def render_full_screen(self, player, enemy, map_obj, page="player", chest_items=None, loot_items=None, loot_enemy="Unknown"):
+    def render_full_screen(self, player, enemy, map_obj, page="player", chest_items=None, loot_items=None, loot_enemy="Unknown", game_state=None):
         """Render the complete game screen (for reference, terminal will handle actual rendering)."""
         # Calculate display distances to fill available map area optimally
         # X distance to fill map_width, Y distance to keep map compact
@@ -270,6 +270,24 @@ class UI:
         
         # Build the screen
         screen_lines = []
+        
+        # Add real-time mode indicator if active
+        if game_state and game_state.realtime_mode:
+            mode_line = f"{ANSI_COLORS['bright_green']}[ REAL-TIME MODE ]{ANSI_COLORS['reset']}  "
+            mode_line += f"HP: {player.hp}/{player.max_hp}  Mana: {player.mana}/{player.max_mana}"
+            screen_lines.append(mode_line)
+            
+            # Add cooldown indicators
+            cooldowns = []
+            for action, cooldown in game_state.action_cooldowns.items():
+                if cooldown > 0:
+                    cooldowns.append(f"{action.capitalize()}={cooldown:.1f}s")
+                else:
+                    cooldowns.append(f"{action.capitalize()}=READY")
+            
+            cooldown_line = f"{ANSI_COLORS['yellow']}[Cooldowns: {' | '.join(cooldowns)}]{ANSI_COLORS['reset']}"
+            screen_lines.append(cooldown_line)
+            screen_lines.append("")
         
         # Top section: map (left) and stats (right)
         map_lines = map_display.split("\n")

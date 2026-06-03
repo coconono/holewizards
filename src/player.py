@@ -21,6 +21,10 @@ class Player:
         self.alive = True
         self.view_distance = 3
         self.defending = False
+        
+        # Real-time mode properties
+        self.action_timer = 0.0
+        self.action_interval = 0.2  # seconds between actions
 
     def take_damage(self, damage):
         """Reduce HP by damage amount."""

@@ -102,7 +102,8 @@ class Game:
                 self.state.current_stats_page,
                 self.state.chest_items,
                 self.state.loot_items,
-                self.state.current_loot_enemy or "Unknown"
+                self.state.current_loot_enemy or "Unknown",
+                self.state  # Pass game state for real-time mode indicators
             )
             print(screen)
             print(self.text_ui.render_command_prompt(), end="", flush=True)
@@ -166,6 +167,23 @@ class Game:
             self.ui = UI()
             self.running = False
             return
+        
+        elif cmd_type == "realtime":
+            new_mode = self.state.toggle_realtime_mode()
+            if new_mode:
+                self.ui.add_log_message("Entering REAL-TIME MODE!", "status")
+                self.ui.add_log_message("Use WASD to move, Shift to suplex, Z to defend, Space to interact, R to exit", "status")
+                # Initialize real-time input system only for text mode
+                if not self.use_graphics:
+                    if not hasattr(self, 'realtime_input'):
+                        from realtime_input import RealtimeInput
+                        self.realtime_input = RealtimeInput()
+                    self.realtime_input.enter_realtime_mode()
+            else:
+                self.ui.add_log_message("Returning to turn-based mode", "status")
+                # Exit realtime input only for text mode
+                if not self.use_graphics and hasattr(self, 'realtime_input'):
+                    self.realtime_input.exit_realtime_mode()
 
         # Movement commands
         elif cmd_type in ("move_up", "move_down", "move_left", "move_right"):
@@ -480,9 +498,256 @@ class Game:
                     return "restart"
             except (KeyboardInterrupt, EOFError):
                 return "quit"
+    
+    def _run_realtime_frame(self):
+        """Run a single frame of real-time mode."""
+        import time
+        
+        # Initialize time tracking
+        if not hasattr(self, 'last_realtime_update'):
+            self.last_realtime_update = time.time()
+        
+        # Calculate delta time
+        current_time = time.time()
+        delta_time = current_time - self.last_realtime_update
+        self.last_realtime_update = current_time
+        
+        # Update cooldowns
+        self.state.update_cooldowns(delta_time)
+        self.state.update_entity_timers(delta_time)
+        
+        # Handle input based on mode (graphics vs text)
+        if self.use_graphics:
+            # Graphics mode: use pygame key states for held keys
+            import pygame
+            
+            # Process pygame events for quit and action keys
+            action_keys = []
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.quit_game = True
+                    self.running = False
+                    return
+                elif event.type == pygame.KEYDOWN:
+                    # Map action keys (non-movement)
+                    if event.key == pygame.K_z:
+                        action_keys.append('z')
+                    elif event.key == pygame.K_r:
+                        action_keys.append('r')
+                    elif event.key == pygame.K_SPACE:
+                        action_keys.append(' ')
+                    elif event.key in (pygame.K_LSHIFT, pygame.K_RSHIFT):
+                        action_keys.append('S')
+            
+            # Check held keys for movement (supports diagonal)
+            pressed = pygame.key.get_pressed()
+            dx, dy = 0, 0
+            
+            if pressed[pygame.K_w]:
+                dy -= 1
+            if pressed[pygame.K_s]:
+                dy += 1
+            if pressed[pygame.K_a]:
+                dx -= 1
+            if pressed[pygame.K_d]:
+                dx += 1
+            
+            # Process movement if any direction pressed
+            if (dx != 0 or dy != 0) and self.state.can_perform_action("move"):
+                if self.state.player_move(dx, dy):
+                    # Build direction name for log
+                    direction_parts = []
+                    if dy < 0:
+                        direction_parts.append("north")
+                    elif dy > 0:
+                        direction_parts.append("south")
+                    if dx < 0:
+                        direction_parts.append("west")
+                    elif dx > 0:
+                        direction_parts.append("east")
+                    
+                    direction_name = "-".join(direction_parts)
+                    self.ui.add_log_message(f"Moved {direction_name}", "movement")
+                    self.state.set_cooldown("move", 0.2)
+                    
+                    # Check for adjacent enemies
+                    enemy = self.state.get_adjacent_enemy()
+                    if enemy and enemy.alive:
+                        self.ui.add_log_message(f"You spot {enemy.name} nearby!", "movement")
+                else:
+                    self.ui.add_log_message("Cannot move - blocked", "movement")
+            
+            # Process action keys
+            for key in action_keys:
+                self._handle_realtime_action_key(key)
+            
+        else:
+            # Text mode: use terminal input polling
+            # Initialize realtime input if not already done
+            if not hasattr(self, 'realtime_input'):
+                from realtime_input import RealtimeInput
+                self.realtime_input = RealtimeInput()
+                self.realtime_input.enter_realtime_mode()
+            
+            # Poll for keyboard input
+            keys = self.realtime_input.poll_keys()
+            
+            # Process keys
+            for key in keys:
+                self._handle_realtime_key(key)
+        
+        # Process enemy actions in real-time
+        for enemy in self.state.enemies:
+            if enemy.alive and enemy.action_timer <= 0:
+                self.state.enemy_take_turn(enemy)
+                enemy.action_timer = enemy.action_interval
+        
+        # Render
+        self.render()
+        
+        # Frame rate limiting (~30 FPS)
+        if self.use_graphics:
+            # Use pygame clock for graphics mode
+            self.ui.clock.tick(30)
+        else:
+            time.sleep(0.033)
+    
+    def _handle_realtime_key(self, key):
+        """Handle a single keypress in real-time mode."""
+        # Movement keys (WASD)
+        if key in ['w', 'a', 's', 'd'] and self.state.can_perform_action("move"):
+            direction_map = {
+                'w': (0, -1),  # Up
+                's': (0, 1),   # Down
+                'a': (-1, 0),  # Left
+                'd': (1, 0),   # Right
+            }
+            dx, dy = direction_map[key]
+            
+            if self.state.player_move(dx, dy):
+                direction_names = {'w': 'north', 's': 'south', 'a': 'west', 'd': 'east'}
+                self.ui.add_log_message(f"Moved {direction_names[key]}", "movement")
+                self.state.set_cooldown("move", 0.2)
+                
+                # Check for adjacent enemies
+                enemy = self.state.get_adjacent_enemy()
+                if enemy and enemy.alive:
+                    self.ui.add_log_message(f"You spot {enemy.name} nearby!", "movement")
+            else:
+                self.ui.add_log_message("Cannot move - blocked", "movement")
+        
+        # Suplex (Shift key - will show as different character)
+        elif key in ['S'] and self.state.can_perform_action("suplex"):  # Capital S for shift+s
+            # Get adjacent enemy
+            enemy = self.state.get_adjacent_enemy()
+            if enemy:
+                success, message = self.state.player_suplex_target(enemy.name)
+                event_type = "victory" if success and "defeats" in message else ("status" if "repositioned" in message else "combat_dealt")
+                self.ui.add_log_message(message, event_type)
+                self.state.set_cooldown("suplex", 1.0)
+            else:
+                self.ui.add_log_message("No enemy to suplex", "system")
+        
+        # Defend (Z key)
+        elif key == 'z' and self.state.can_perform_action("defend"):
+            success, message = self.state.player_defend()
+            self.ui.add_log_message(message, "status")
+            self.state.set_cooldown("defend", 0.5)
+        
+        # Interact (Space key)
+        elif key == ' ' and self.state.can_perform_action("interact"):
+            # Check for adjacent chest
+            px, py = self.state.player.position["x"], self.state.player.position["y"]
+            chest_found = False
+            
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                check_x, check_y = px + dx, py + dy
+                if self.state.map.is_valid_position(check_x, check_y):
+                    tile = self.state.map.get_tile(check_x, check_y)
+                    if tile and tile.tile_type == "chest":
+                        # Open chest and exit real-time mode
+                        success, message = self.state.show_chest()
+                        self.ui.add_log_message(message, "loot")
+                        if success:
+                            self.state.toggle_realtime_mode()
+                            if not self.use_graphics and hasattr(self, 'realtime_input'):
+                                self.realtime_input.exit_realtime_mode()
+                            self.ui.add_log_message("Chest opened - returning to turn-based mode", "status")
+                        chest_found = True
+                        break
+            
+            if not chest_found:
+                self.ui.add_log_message("Nothing to interact with", "system")
+            
+            self.state.set_cooldown("interact", 0.3)
+        
+        # Toggle back to turn-based mode (R key)
+        elif key == 'r':
+            self.state.toggle_realtime_mode()
+            if not self.use_graphics and hasattr(self, 'realtime_input'):
+                self.realtime_input.exit_realtime_mode()
+            self.ui.add_log_message("Returning to turn-based mode", "status")
+    
+    def _handle_realtime_action_key(self, key):
+        """Handle action keys in real-time mode (non-movement).
+        
+        This is used in graphics mode where movement is handled separately via key states.
+        
+        Args:
+            key: Action key character ('z', 'r', ' ', 'S')
+        """
+        # Suplex (Shift key)
+        if key == 'S' and self.state.can_perform_action("suplex"):
+            # Get adjacent enemy
+            enemy = self.state.get_adjacent_enemy()
+            if enemy:
+                success, message = self.state.player_suplex_target(enemy.name)
+                event_type = "victory" if success and "defeats" in message else ("status" if "repositioned" in message else "combat_dealt")
+                self.ui.add_log_message(message, event_type)
+                self.state.set_cooldown("suplex", 1.0)
+            else:
+                self.ui.add_log_message("No enemy to suplex", "system")
+        
+        # Defend (Z key)
+        elif key == 'z' and self.state.can_perform_action("defend"):
+            success, message = self.state.player_defend()
+            self.ui.add_log_message(message, "status")
+            self.state.set_cooldown("defend", 0.5)
+        
+        # Interact (Space key)
+        elif key == ' ' and self.state.can_perform_action("interact"):
+            # Check for adjacent chest
+            px, py = self.state.player.position["x"], self.state.player.position["y"]
+            chest_found = False
+            
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                check_x, check_y = px + dx, py + dy
+                if self.state.map.is_valid_position(check_x, check_y):
+                    tile = self.state.map.get_tile(check_x, check_y)
+                    if tile and tile.tile_type == "chest":
+                        # Open chest and exit real-time mode
+                        success, message = self.state.show_chest()
+                        self.ui.add_log_message(message, "loot")
+                        if success:
+                            self.state.toggle_realtime_mode()
+                            self.ui.add_log_message("Chest opened - returning to turn-based mode", "status")
+                        chest_found = True
+                        break
+            
+            if not chest_found:
+                self.ui.add_log_message("Nothing to interact with", "system")
+            
+            self.state.set_cooldown("interact", 0.3)
+        
+        # Toggle back to turn-based mode (R key)
+        elif key == 'r':
+            self.state.toggle_realtime_mode()
+            self.ui.add_log_message("Returning to turn-based mode", "status")
 
     def run(self):
         """Run the main game loop."""
+        import time
+        
         self.show_intro()
 
         while self.running:
@@ -496,36 +761,40 @@ class Game:
                 self.running = False
                 break
 
-            # Render game state
-            self.render()
-
-            # Get player input
-            if self.use_graphics:
-                # Graphical input with tab completion
-                # Update game state in tab completion for context-aware completions
-                if self.tab_completion:
-                    self.tab_completion.set_game_state(self.state)
-                
-                command = self.ui.handle_events()
-                if command == "quit":
-                    self.quit_game = True
-                    self.running = False
-                elif command:
-                    self.process_command(command)
+            # Handle real-time mode or turn-based mode
+            if self.state.realtime_mode:
+                self._run_realtime_frame()
             else:
-                # Text input with tab completion
-                try:
+                # Render game state
+                self.render()
+
+                # Get player input
+                if self.use_graphics:
+                    # Graphical input with tab completion
                     # Update game state in tab completion for context-aware completions
                     if self.tab_completion:
                         self.tab_completion.set_game_state(self.state)
                     
-                    command = input().strip()
-                    if command:
+                    command = self.ui.handle_events()
+                    if command == "quit":
+                        self.quit_game = True
+                        self.running = False
+                    elif command:
                         self.process_command(command)
-                except (KeyboardInterrupt, EOFError):
-                    print("\nThanks for playing Hole Wizards!")
-                    self.running = False
-                    break
+                else:
+                    # Text input with tab completion
+                    try:
+                        # Update game state in tab completion for context-aware completions
+                        if self.tab_completion:
+                            self.tab_completion.set_game_state(self.state)
+                        
+                        command = input().strip()
+                        if command:
+                            self.process_command(command)
+                    except (KeyboardInterrupt, EOFError):
+                        print("\nThanks for playing Hole Wizards!")
+                        self.running = False
+                        break
 
 
 def main():

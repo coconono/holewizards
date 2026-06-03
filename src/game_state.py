@@ -34,6 +34,16 @@ class GameState:
         self.current_loot_enemy = None  # Enemy whose loot is being viewed
         self.chests = {}  # Dictionary of chest locations {(x, y): [items]}
         
+        # Real-time mode state
+        self.realtime_mode = False
+        self.last_update_time = 0.0
+        self.action_cooldowns = {
+            "move": 0.0,
+            "suplex": 0.0,
+            "defend": 0.0,
+            "interact": 0.0,
+        }
+        
         # Combat statistics tracking
         self.combat_stats = {
             'total_damage_dealt': 0,
@@ -281,7 +291,8 @@ class GameState:
 
     def player_move(self, dx, dy):
         """Move the player on the map."""
-        return self.map.move_player(self.player, dx, dy)
+        ui = getattr(self, 'ui', None)
+        return self.map.move_player(self.player, dx, dy, ui)
 
     def player_take_item(self, item_name):
         """Have the player take an item from the current location."""
@@ -534,7 +545,7 @@ class GameState:
         repositioned = False
         if self.map.is_walkable(new_x, new_y):
             # Move enemy to new position
-            if self.map.move_enemy(target_enemy, new_x - ex, new_y - ey):
+            if self.map.move_enemy(target_enemy, new_x - ex, new_y - ey, self.ui):
                 repositioned = True
         
         # Build result message
@@ -774,16 +785,16 @@ class GameState:
         action = enemy.choose_action()
         
         if action == 0:  # Move up
-            self.map.move_enemy(enemy, 0, -1)
+            self.map.move_enemy(enemy, 0, -1, self.ui)
             enemy.last_action = 0
         elif action == 1:  # Move down
-            self.map.move_enemy(enemy, 0, 1)
+            self.map.move_enemy(enemy, 0, 1, self.ui)
             enemy.last_action = 1
         elif action == 2:  # Move left
-            self.map.move_enemy(enemy, -1, 0)
+            self.map.move_enemy(enemy, -1, 0, self.ui)
             enemy.last_action = 2
         elif action == 3:  # Move right
-            self.map.move_enemy(enemy, 1, 0)
+            self.map.move_enemy(enemy, 1, 0, self.ui)
             enemy.last_action = 3
         elif action == 4:  # Attack
             if self._is_adjacent(enemy, self.player):
@@ -863,10 +874,10 @@ class GameState:
                 repositioned = False
                 if self.map.is_walkable(new_x, new_y):
                     if target_type == 'player':
-                        if self.map.move_player(self.player, new_x - tx, new_y - ty):
+                        if self.map.move_player(self.player, new_x - tx, new_y - ty, self.ui):
                             repositioned = True
                     else:  # enemy target
-                        if self.map.move_enemy(target, new_x - tx, new_y - ty):
+                        if self.map.move_enemy(target, new_x - tx, new_y - ty, self.ui):
                             repositioned = True
                 
                 # Display log messages based on target type and outcome
@@ -955,3 +966,57 @@ class GameState:
             "game_over": self.game_over,
         }
         return status
+    
+    def update_cooldowns(self, delta_time):
+        """Update action cooldowns based on elapsed time.
+        
+        Args:
+            delta_time: Time elapsed since last update (in seconds)
+        """
+        for action in self.action_cooldowns:
+            if self.action_cooldowns[action] > 0:
+                self.action_cooldowns[action] = max(0, self.action_cooldowns[action] - delta_time)
+    
+    def can_perform_action(self, action):
+        """Check if an action is off cooldown.
+        
+        Args:
+            action: Action name (e.g., "move", "suplex", "defend")
+        
+        Returns:
+            bool: True if action can be performed
+        """
+        return self.action_cooldowns.get(action, 0) <= 0
+    
+    def set_cooldown(self, action, cooldown_time):
+        """Set cooldown for an action.
+        
+        Args:
+            action: Action name
+            cooldown_time: Cooldown duration in seconds
+        """
+        self.action_cooldowns[action] = cooldown_time
+    
+    def toggle_realtime_mode(self):
+        """Toggle real-time mode on/off.
+        
+        Returns:
+            bool: New mode state (True = realtime, False = turn-based)
+        """
+        self.realtime_mode = not self.realtime_mode
+        return self.realtime_mode
+    
+    def update_entity_timers(self, delta_time):
+        """Update action timers for all entities in real-time mode.
+        
+        Args:
+            delta_time: Time elapsed since last update (in seconds)
+        """
+        # Update player timer
+        if self.player.action_timer > 0:
+            self.player.action_timer -= delta_time
+        
+        # Update enemy timers
+        for enemy in self.enemies:
+            if enemy.alive and enemy.action_timer > 0:
+                enemy.action_timer -= delta_time

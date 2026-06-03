@@ -28,6 +28,10 @@ class Enemy:
         self.last_action = None
         self.defending = False
         self.last_direction = None  # Track last movement direction to avoid immediately backtracking
+        
+        # Real-time mode properties
+        self.action_timer = 0.0
+        self.action_interval = random.uniform(0.5, 1.5)  # seconds between actions (varies by enemy)
 
     def take_damage(self, damage):
         """Reduce HP by damage amount."""

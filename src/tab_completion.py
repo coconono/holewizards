@@ -169,6 +169,7 @@ class TabCompletion:
             "legend",
             "quit",
             "restart",
+            "realtime",
             "move up",
             "move down",
             "move left",
