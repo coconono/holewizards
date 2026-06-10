@@ -14,7 +14,14 @@ class Item:
         self.defense_value = defense_value
         self.hp_increase = 0
         self.mana_increase = 0
-        self.effects = []  # List of effects
+        self.effects = []  # List of effects (legacy)
+        
+        # New comprehensive effect system
+        self.equip_effect = {}  # Applied when equipped
+        self.use_effect = {}  # Applied when used/consumed
+        self.attack_effect = {}  # Applied during attacks
+        self.consumable = False  # Whether item is destroyed on use
+        self.description = ""  # Flavor text
 
     def get_attack_value(self):
         """Get attack value for this item."""
@@ -28,21 +35,257 @@ class Item:
             return self.defense_value
         return random.randint(self.defense_value[0], self.defense_value[1])
 
-    def apply_equip_effect(self, character):
-        """Apply EQUIP effect to a character."""
-        if self.hp_increase > 0:
-            character.max_hp += self.hp_increase
-            character.hp = min(character.hp + self.hp_increase, character.max_hp)
-        if self.mana_increase > 0:
-            character.max_mana += self.mana_increase
-            character.mana = min(character.mana + self.mana_increase, character.max_mana)
+    def apply_equip_effect(self, character, equipping=True):
+        """Apply or reverse EQUIP effect on a character.
+        
+        Args:
+            character: The character to apply effects to
+            equipping: True when equipping, False when unequipping
+        """
+        multiplier = 1 if equipping else -1
+        
+        # Handle legacy hp/mana increase (for backwards compatibility)
+        if self.hp_increase != 0:
+            character.max_hp += (self.hp_increase * multiplier)
+            # Keep current HP in bounds
+            character.hp = max(0, min(character.hp, character.max_hp))
+        
+        if self.mana_increase != 0:
+            character.max_mana += (self.mana_increase * multiplier)
+            # Keep current mana in bounds
+            character.mana = max(0, min(character.mana, character.max_mana))
+        
+        # Handle new equip_effect format
+        if self.equip_effect and isinstance(self.equip_effect, dict):
+            effect_type = self.equip_effect.get('type', '')
+            
+            if effect_type == 'stat_mod':
+                # Stat modifications
+                if 'defense' in self.equip_effect:
+                    character.defense_bonus = getattr(character, 'defense_bonus', 0)
+                    character.defense_bonus += (self.equip_effect['defense'] * multiplier)
+                if 'attack' in self.equip_effect:
+                    character.attack_bonus = getattr(character, 'attack_bonus', 0)
+                    character.attack_bonus += (self.equip_effect['attack'] * multiplier)
+                if 'max_hp' in self.equip_effect:
+                    character.max_hp += (self.equip_effect['max_hp'] * multiplier)
+                    character.hp = max(0, min(character.hp, character.max_hp))
+                if 'max_mana' in self.equip_effect:
+                    character.max_mana += (self.equip_effect['max_mana'] * multiplier)
+                    character.mana = max(0, min(character.mana, character.max_mana))
+        
+        return True
 
-    def apply_use_effect(self, character):
-        """Apply USE effect to a character."""
+    def apply_use_effect(self, character, has_weapon_equipped=True):
+        """Apply USE effect to a character.
+        
+        Args:
+            character: The character to apply effects to
+            has_weapon_equipped: Whether character has a weapon equipped (for conditional buffs)
+        
+        Returns:
+            tuple: (success: bool, message: str, buff_info: dict or None)
+        """
+        # Handle legacy hp/mana increase (for backwards compatibility)
+        hp_restored = 0
+        mana_restored = 0
+        
         if self.hp_increase > 0:
+            hp_before = character.hp
             character.heal(self.hp_increase)
+            hp_restored = character.hp - hp_before
+        
         if self.mana_increase > 0:
+            mana_before = character.mana
             character.restore_mana(self.mana_increase)
+            mana_restored = character.mana - mana_before
+        
+        # Build message
+        messages = []
+        if hp_restored > 0:
+            messages.append(f"You restore {hp_restored} HP!")
+        if mana_restored > 0:
+            messages.append(f"You restore {mana_restored} Mana!")
+        
+        # Handle new use_effect format
+        buff_info = None
+        if self.use_effect and isinstance(self.use_effect, dict):
+            effect_type = self.use_effect.get('type', '')
+            
+            if effect_type == 'heal':
+                hp_heal = self.use_effect.get('hp', 0)
+                hp_before = character.hp
+                character.heal(hp_heal)
+                hp_restored = character.hp - hp_before
+                if hp_restored > 0:
+                    messages.append(f"You restore {hp_restored} HP!")
+                elif character.hp == character.max_hp:
+                    messages.append("You're already at full health!")
+            
+            elif effect_type == 'mana_restore':
+                mana_heal = self.use_effect.get('mana', 0)
+                mana_before = character.mana
+                character.restore_mana(mana_heal)
+                mana_restored = character.mana - mana_before
+                if mana_restored > 0:
+                    messages.append(f"You restore {mana_restored} Mana!")
+                elif character.mana == character.max_mana:
+                    messages.append("You're already at full mana!")
+            
+            elif effect_type == 'buff_attack':
+                # Elemental attack buff
+                requires_weapon = self.use_effect.get('requires_weapon', True)
+                
+                if requires_weapon and not has_weapon_equipped:
+                    # Damage the player instead
+                    damage = self.use_effect.get('damage', 10)
+                    character.take_damage(damage)
+                    messages.append(f"You take {damage} fire damage because you have no weapon equipped!")
+                    return (True, "\n".join(messages), None)
+                else:
+                    # Apply buff
+                    element = self.use_effect.get('element', 'fire')
+                    damage = self.use_effect.get('damage', 10)
+                    duration = self.use_effect.get('duration', 1)
+                    
+                    buff_info = {
+                        'type': 'attack_buff',
+                        'element': element,
+                        'damage': damage,
+                        'duration': duration
+                    }
+                    messages.append(f"Your next {duration} attack(s) will deal an additional {damage} {element} damage!")
+        
+        message = "\n".join(messages) if messages else "Nothing happens."
+        return (True, message, buff_info)
+
+    def apply_attack_effect(self, attacker, target):
+        """Apply ATTACK effect during an attack.
+        
+        Args:
+            attacker: The character attacking
+            target: The target being attacked
+        
+        Returns:
+            dict: Effect results with keys 'extra_damage', 'damage_type', 'status_applied', 'lifesteal'
+        """
+        result = {
+            'extra_damage': 0,
+            'damage_type': None,
+            'status_applied': None,
+            'lifesteal': 0
+        }
+        
+        if not self.attack_effect or not isinstance(self.attack_effect, dict):
+            return result
+        
+        effect_type = self.attack_effect.get('type', '')
+        
+        if effect_type == 'elemental':
+            # Elemental damage
+            result['extra_damage'] = self.attack_effect.get('damage', 0)
+            result['damage_type'] = self.attack_effect.get('element', 'fire')
+        
+        elif effect_type == 'status':
+            # Apply status effect (poison, burn, etc.)
+            status_type = self.attack_effect.get('status', 'poison')
+            damage_per_turn = self.attack_effect.get('damage_per_turn', 5)
+            duration = self.attack_effect.get('duration', 3)
+            
+            result['status_applied'] = {
+                'type': status_type,
+                'damage': damage_per_turn,
+                'duration': duration
+            }
+        
+        elif effect_type == 'lifesteal':
+            # Lifesteal effect
+            result['lifesteal'] = self.attack_effect.get('amount', 5)
+        
+        return result
+    
+    def get_stats_display(self):
+        """Get formatted stats for display."""
+        lines = []
+        lines.append(f"Item: {self.name}")
+        lines.append(f"Type: {self.item_type.capitalize()}")
+        lines.append(f"Attack Value: +{self.attack_value}" if self.attack_value else "Attack Value: +0")
+        lines.append(f"Defend Value: +{self.defense_value}" if self.defense_value else "Defend Value: +0")
+        lines.append(f"HP Increase: +{self.hp_increase}" if self.hp_increase else "HP Increase: +0")
+        lines.append(f"Mana Increase: +{self.mana_increase}" if self.mana_increase else "Mana Increase: +0")
+        
+        # EQUIP Effect
+        if self.equip_effect and self.equip_effect != {}:
+            equip_desc = self._format_effect_description(self.equip_effect)
+            lines.append(f"EQUIP Effect: {equip_desc}")
+        else:
+            lines.append("EQUIP Effect: None")
+        
+        # USE Effect
+        if self.use_effect and self.use_effect != {}:
+            use_desc = self._format_effect_description(self.use_effect)
+            lines.append(f"USE Effect: {use_desc}")
+        else:
+            lines.append("USE Effect: None")
+        
+        # ATTACK Effect
+        if self.attack_effect and self.attack_effect != {}:
+            attack_desc = self._format_effect_description(self.attack_effect)
+            lines.append(f"ATTACK Effect: {attack_desc}")
+        else:
+            lines.append("ATTACK Effect: None")
+        
+        return "\n".join(lines)
+    
+    def _format_effect_description(self, effect):
+        """Format an effect dict into readable description."""
+        if not effect or not isinstance(effect, dict):
+            return "None"
+        
+        effect_type = effect.get('type', '')
+        
+        if effect_type == 'stat_mod':
+            parts = []
+            if 'defense' in effect:
+                parts.append(f"Defense {effect['defense']:+d}")
+            if 'attack' in effect:
+                parts.append(f"Attack {effect['attack']:+d}")
+            if 'max_hp' in effect:
+                parts.append(f"Max HP {effect['max_hp']:+d}")
+            if 'max_mana' in effect:
+                parts.append(f"Max Mana {effect['max_mana']:+d}")
+            return ", ".join(parts) if parts else "None"
+        
+        elif effect_type == 'heal':
+            hp = effect.get('hp', 0)
+            return f"Restores {hp} HP when consumed"
+        
+        elif effect_type == 'mana_restore':
+            mana = effect.get('mana', 0)
+            return f"Restores {mana} Mana when consumed"
+        
+        elif effect_type == 'buff_attack':
+            element = effect.get('element', 'fire')
+            damage = effect.get('damage', 10)
+            duration = effect.get('duration', 1)
+            return f"Adds +{damage} {element} damage to next {duration} attack(s)"
+        
+        elif effect_type == 'elemental':
+            element = effect.get('element', 'fire')
+            damage = effect.get('damage', 10)
+            return f"Deals +{damage} {element} damage per attack"
+        
+        elif effect_type == 'status':
+            status = effect.get('status', 'poison')
+            damage = effect.get('damage_per_turn', 5)
+            duration = effect.get('duration', 3)
+            return f"Applies {status} ({damage} damage/turn for {duration} turns)"
+        
+        elif effect_type == 'lifesteal':
+            amount = effect.get('amount', 5)
+            return f"Heals {amount} HP on successful hit"
+        
+        return str(effect)
 
     def __repr__(self):
         return f"{self.name}"
@@ -54,6 +297,7 @@ class Weapon(Item):
     def __init__(self, name, attack_value):
         """Initialize a weapon."""
         super().__init__(name, "weapon", attack_value=attack_value)
+        self.consumable = False
 
     def __repr__(self):
         return f"{self.name} (Weapon, ATK:{self.get_attack_value()})"
@@ -65,6 +309,7 @@ class Armor(Item):
     def __init__(self, name, defense_value):
         """Initialize armor."""
         super().__init__(name, "armor", defense_value=defense_value)
+        self.consumable = False
 
     def __repr__(self):
         return f"{self.name} (Armor, DEF:{self.get_defense_value()})"
@@ -77,6 +322,7 @@ class Potion(Item):
         """Initialize a potion."""
         super().__init__(name, "consumable")
         self.potion_type = potion_type  # "hp" or "mana"
+        self.consumable = True
         if potion_type == "hp":
             self.hp_increase = value if value > 0 else random.randint(2, 5)
         else:
@@ -172,6 +418,7 @@ def load_random_weapon_from_config():
     from configparser import ConfigParser
     from resource_path import get_data_path
     import random
+    import json
     
     # Get path to weapons.cfg
     config_file = get_data_path('weapons.cfg')
@@ -188,7 +435,29 @@ def load_random_weapon_from_config():
         if section.startswith('weapon_'):
             weapon_name = config.get(section, 'name')
             attack_value = config.getint(section, 'attack_value')
-            weapons.append(Weapon(weapon_name, attack_value))
+            weapon = Weapon(weapon_name, attack_value)
+            
+            # Load optional new fields
+            if config.has_option(section, 'description'):
+                weapon.description = config.get(section, 'description')
+            
+            if config.has_option(section, 'attack_effect'):
+                try:
+                    effect_str = config.get(section, 'attack_effect')
+                    if effect_str and effect_str != '{}':
+                        weapon.attack_effect = json.loads(effect_str)
+                except (json.JSONDecodeError, ValueError):
+                    pass  # Skip malformed effects
+            
+            if config.has_option(section, 'equip_effect'):
+                try:
+                    effect_str = config.get(section, 'equip_effect')
+                    if effect_str and effect_str != '{}':
+                        weapon.equip_effect = json.loads(effect_str)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            
+            weapons.append(weapon)
     
     return random.choice(weapons) if weapons else Weapon("Iron Dagger", 2)
 
@@ -198,6 +467,7 @@ def load_random_armor_from_config():
     from configparser import ConfigParser
     from resource_path import get_data_path
     import random
+    import json
     
     # Get path to armor.cfg
     config_file = get_data_path('armor.cfg')
@@ -214,7 +484,27 @@ def load_random_armor_from_config():
         if section.startswith('armor_'):
             armor_name = config.get(section, 'name')
             defense_value = config.getint(section, 'defense_value')
-            armors.append(Armor(armor_name, defense_value))
+            armor = Armor(armor_name, defense_value)
+            
+            # Load optional new fields
+            if config.has_option(section, 'description'):
+                armor.description = config.get(section, 'description')
+            
+            if config.has_option(section, 'equip_effect'):
+                try:
+                    effect_str = config.get(section, 'equip_effect')
+                    if effect_str and effect_str != '{}':
+                        armor.equip_effect = json.loads(effect_str)
+                except (json.JSONDecodeError, ValueError):
+                    pass  # Skip malformed effects
+            
+            if config.has_option(section, 'hp_increase'):
+                armor.hp_increase = config.getint(section, 'hp_increase')
+            
+            if config.has_option(section, 'mana_increase'):
+                armor.mana_increase = config.getint(section, 'mana_increase')
+            
+            armors.append(armor)
     
     return random.choice(armors) if armors else Armor("Leather Armor", 1)
 

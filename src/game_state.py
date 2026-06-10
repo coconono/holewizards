@@ -338,17 +338,47 @@ class GameState:
         if not item:
             return False, f"Item '{item_name}' not in inventory"
         
-        if item.item_type == "weapon":
-            self.player.equip_weapon(item)
-            return True, f"Equipped {item.name} as weapon"
-        elif item.item_type == "armor":
-            self.player.equip_armor(item)
-            return True, f"Equipped {item.name} as armor"
-        elif item.item_type == "spell":
-            self.player.equip_spell(item)
-            return True, f"Equipped {item.name} as spell"
+        messages = []
         
-        return False, "Cannot equip this item"
+        if item.item_type == "weapon":
+            # Unequip existing weapon first
+            if self.player.equipped_weapon:
+                old_weapon = self.player.equipped_weapon
+                old_weapon.apply_equip_effect(self.player, equipping=False)
+                messages.append(f"Unequipped {old_weapon.name}")
+            
+            # Equip new weapon
+            self.player.equip_weapon(item)
+            item.apply_equip_effect(self.player, equipping=True)
+            messages.append(f"Equipped {item.name} as weapon")
+            
+        elif item.item_type == "armor":
+            # Unequip existing armor first
+            if self.player.equipped_armor:
+                old_armor = self.player.equipped_armor
+                old_armor.apply_equip_effect(self.player, equipping=False)
+                messages.append(f"Unequipped {old_armor.name}")
+            
+            # Equip new armor
+            self.player.equip_armor(item)
+            item.apply_equip_effect(self.player, equipping=True)
+            messages.append(f"Equipped {item.name} as armor")
+            
+        elif item.item_type == "spell":
+            # Unequip existing spell first
+            if self.player.equipped_spell:
+                old_spell = self.player.equipped_spell
+                old_spell.apply_equip_effect(self.player, equipping=False)
+                messages.append(f"Unequipped {old_spell.name}")
+            
+            # Equip new spell
+            self.player.equip_spell(item)
+            item.apply_equip_effect(self.player, equipping=True)
+            messages.append(f"Equipped {item.name} as spell")
+        else:
+            return False, "Cannot equip this item"
+        
+        return True, "\n".join(messages)
 
     def player_use_item(self, item_name):
         """Have the player use an item."""
@@ -357,29 +387,39 @@ class GameState:
             return False, f"Item '{item_name}' not in inventory"
         
         if item.item_type == "consumable":
-            # Track HP/Mana before use to measure healing
-            hp_before = self.player.hp
-            mana_before = self.player.mana
+            # Apply USE effect with weapon check
+            has_weapon = self.player.equipped_weapon is not None
+            success, message, buff_info = item.apply_use_effect(self.player, has_weapon)
             
-            item.apply_use_effect(self.player)
+            if not success:
+                return False, message
             
-            # Track healing
-            hp_restored = self.player.hp - hp_before
-            mana_restored = self.player.mana - mana_before
-            if hp_restored > 0:
-                self.combat_stats['healing_used'] += hp_restored
+            # Add buff if provided
+            if buff_info:
+                self.player.add_buff(buff_info)
             
-            # For stackable items, only remove one from the stack
-            if hasattr(item, 'remove_quantity'):
-                if item.remove_quantity(1):
-                    # If quantity reaches 0, remove the item entirely
-                    if item.quantity <= 0:
-                        self.player.remove_from_inventory(item)
-                    return True, f"Used {item.base_name}"
-            else:
-                # Non-stackable consumables are removed entirely
-                self.player.remove_from_inventory(item)
-                return True, f"Used {item.name}"
+            # Track healing for stats
+            if 'HP' in message:
+                import re
+                hp_match = re.search(r'(\d+) HP', message)
+                if hp_match:
+                    self.combat_stats['healing_used'] += int(hp_match.group(1))
+            
+            # Handle consumable removal
+            if item.consumable:
+                # For stackable items, only remove one from the stack
+                if hasattr(item, 'remove_quantity'):
+                    if item.remove_quantity(1):
+                        # If quantity reaches 0, remove the item entirely
+                        if item.quantity <= 0:
+                            self.player.remove_from_inventory(item)
+                        return True, f"Used {item.base_name}\n{message}"
+                else:
+                    # Non-stackable consumables are removed entirely
+                    self.player.remove_from_inventory(item)
+                    return True, f"Used {item.name}\n{message}"
+            
+            return True, f"Used {item.name}\n{message}"
         
         elif item.item_type == "spell":
             # Check if player has enough mana
@@ -391,12 +431,17 @@ class GameState:
             self.player.mana -= mana_cost
             
             # Apply spell effects
-            item.apply_use_effect(self.player)
+            has_weapon = self.player.equipped_weapon is not None
+            success, message, buff_info = item.apply_use_effect(self.player, has_weapon)
+            
+            # Add buff if provided
+            if buff_info:
+                self.player.add_buff(buff_info)
             
             # Track spell cast
             self.combat_stats['spells_cast'] += 1
             
-            return True, f"Cast {item.name} (cost {mana_cost} mana)"
+            return True, f"Cast {item.name} (cost {mana_cost} mana)\n{message}"
         
         return False, "Cannot use this item"
 
@@ -409,20 +454,70 @@ class GameState:
         if not enemy.alive:
             return False, "Enemy is already dead"
         
+        # Base damage
         damage = self.player.get_attack_damage()
-        enemy.take_damage(damage)
+        messages = []
+        
+        # Check for active attack buffs
+        buff = self.player.consume_attack_buff()
+        buff_damage = 0
+        if buff:
+            buff_damage = buff.get('damage', 0)
+            element = buff.get('element', 'fire')
+            messages.append(f"You attack {enemy.name} with your weapon.")
+            messages.append(f"You deal {damage} physical damage and {buff_damage} {element} damage!")
+        else:
+            # Check weapon ATTACK effects
+            if self.player.equipped_weapon:
+                attack_effect = self.player.equipped_weapon.apply_attack_effect(self.player, enemy)
+                
+                if attack_effect['extra_damage'] > 0:
+                    buff_damage = attack_effect['extra_damage']
+                    damage_type = attack_effect['damage_type']
+                    messages.append(f"You attack {enemy.name} with your {self.player.equipped_weapon.name}.")
+                    messages.append(f"You deal {damage} physical damage and {buff_damage} {damage_type} damage!")
+                
+                if attack_effect['status_applied']:
+                    status_info = attack_effect['status_applied']
+                    enemy.add_status_effect(status_info)
+                    status_type = status_info['type']
+                    dmg_per_turn = status_info['damage']
+                    duration = status_info['duration']
+                    if not messages:
+                        messages.append(f"You attack {enemy.name} with your {self.player.equipped_weapon.name}.")
+                    messages.append(f"You deal {damage} physical damage and apply {status_type}!")
+                    messages.append(f"{enemy.name} will take {dmg_per_turn} {status_type} damage each turn for the next {duration} turns.")
+                
+                if attack_effect['lifesteal'] > 0:
+                    lifesteal_amount = attack_effect['lifesteal']
+                    self.player.heal(lifesteal_amount)
+                    if not messages:
+                        messages.append(f"You attack {enemy.name} with your {self.player.equipped_weapon.name}.")
+                    if damage > 0:
+                        messages.append(f"You deal {damage} physical damage and absorb {lifesteal_amount} HP!")
+                    else:
+                        messages.append(f"You absorb {lifesteal_amount} HP!")
+            
+            # If no special effects, just basic attack message
+            if not messages:
+                messages.append(f"Attacked {enemy.name} for {damage} damage!")
+        
+        # Apply total damage
+        total_damage = damage + buff_damage
+        enemy.take_damage(total_damage)
         
         # Track combat stats
         self.combat_stats['attacks_made'] += 1
-        self.combat_stats['total_damage_dealt'] += damage
+        self.combat_stats['total_damage_dealt'] += total_damage
         self.combat_stats['last_attack_dealt'] = {
             'attacker': 'You',
             'target': enemy.name,
-            'damage': damage
+            'damage': total_damage
         }
         
         if enemy.alive:
-            return True, f"Attacked {enemy.name} for {damage} damage! ({enemy.hp} HP remaining)"
+            messages.append(f"({enemy.hp} HP remaining)")
+            return True, "\n".join(messages)
         else:
             # Track monster defeat
             self.combat_stats['monsters_defeated'] += 1
@@ -443,12 +538,14 @@ class GameState:
             xp_gained = enemy.xp
             self.player.gain_xp(xp_gained)
             
+            messages.append(f"Defeated {enemy.name}! Gained {xp_gained} XP!")
+            
             # Build loot message with items list
             if loot_items:
                 items_str = ", ".join([str(item) for item in loot_items])
-                return True, f"Defeated {enemy.name}! Gained {xp_gained} XP! Loot: {items_str}"
-            else:
-                return True, f"Defeated {enemy.name}! Gained {xp_gained} XP!"
+                messages.append(f"Loot: {items_str}")
+            
+            return True, "\n".join(messages)
 
     def player_attack_target(self, target_name):
         """Have the player attack a named enemy (must be adjacent)."""
@@ -466,40 +563,101 @@ class GameState:
         if not self._is_adjacent(self.player, target_enemy):
             return False, f"{target_enemy.name} is not within reach"
         
-        # Attack the target
+        # Use the same attack logic as player_attack()
+        enemy = target_enemy
+        
+        # Base damage
         damage = self.player.get_attack_damage()
-        target_enemy.take_damage(damage)
+        messages = []
+        
+        # Check for active attack buffs
+        buff = self.player.consume_attack_buff()
+        buff_damage = 0
+        if buff:
+            buff_damage = buff.get('damage', 0)
+            element = buff.get('element', 'fire')
+            messages.append(f"You attack {enemy.name} with your weapon.")
+            messages.append(f"You deal {damage} physical damage and {buff_damage} {element} damage!")
+        else:
+            # Check weapon ATTACK effects
+            if self.player.equipped_weapon:
+                attack_effect = self.player.equipped_weapon.apply_attack_effect(self.player, enemy)
+                
+                if attack_effect['extra_damage'] > 0:
+                    buff_damage = attack_effect['extra_damage']
+                    damage_type = attack_effect['damage_type']
+                    messages.append(f"You attack {enemy.name} with your {self.player.equipped_weapon.name}.")
+                    messages.append(f"You deal {damage} physical damage and {buff_damage} {damage_type} damage!")
+                
+                if attack_effect['status_applied']:
+                    status_info = attack_effect['status_applied']
+                    enemy.add_status_effect(status_info)
+                    status_type = status_info['type']
+                    dmg_per_turn = status_info['damage']
+                    duration = status_info['duration']
+                    if not messages:
+                        messages.append(f"You attack {enemy.name} with your {self.player.equipped_weapon.name}.")
+                    messages.append(f"You deal {damage} physical damage and apply {status_type}!")
+                    messages.append(f"{enemy.name} will take {dmg_per_turn} {status_type} damage each turn for the next {duration} turns.")
+                
+                if attack_effect['lifesteal'] > 0:
+                    lifesteal_amount = attack_effect['lifesteal']
+                    self.player.heal(lifesteal_amount)
+                    if not messages:
+                        messages.append(f"You attack {enemy.name} with your {self.player.equipped_weapon.name}.")
+                    if damage > 0:
+                        messages.append(f"You deal {damage} physical damage and absorb {lifesteal_amount} HP!")
+                    else:
+                        messages.append(f"You absorb {lifesteal_amount} HP!")
+            
+            # If no special effects, just basic attack message
+            if not messages:
+                messages.append(f"Attacked {enemy.name} for {damage} damage!")
+        
+        # Apply total damage
+        total_damage = damage + buff_damage
+        enemy.take_damage(total_damage)
         
         # Track combat stats
         self.combat_stats['attacks_made'] += 1
-        self.combat_stats['total_damage_dealt'] += damage
+        self.combat_stats['total_damage_dealt'] += total_damage
         self.combat_stats['last_attack_dealt'] = {
             'attacker': 'You',
-            'target': target_enemy.name,
-            'damage': damage
+            'target': enemy.name,
+            'damage': total_damage
         }
         
-        if target_enemy.alive:
-            return True, f"Attacked {target_enemy.name} for {damage} damage! ({target_enemy.hp} HP remaining)"
+        if enemy.alive:
+            messages.append(f"({enemy.hp} HP remaining)")
+            return True, "\n".join(messages)
         else:
             # Track monster defeat
             self.combat_stats['monsters_defeated'] += 1
             # Collect all items from inventory (equipped items are already in inventory)
-            loot_items = list(target_enemy.inventory)
+            loot_items = list(enemy.inventory)
             
             # Create loot bag
-            loot_bag = LootBag(target_enemy.name, loot_items)
+            loot_bag = LootBag(enemy.name, loot_items)
             
             # Place loot bag on map at enemy's position (with spread logic)
-            enemy_x = target_enemy.position["x"]
-            enemy_y = target_enemy.position["y"]
+            enemy_x = enemy.position["x"]
+            enemy_y = enemy.position["y"]
             self.map.place_item(loot_bag, enemy_x, enemy_y, spread_loot=True)
             
             # Remove dead enemy from map and game state
-            self.map.remove_enemy(target_enemy)
-            self.enemies.remove(target_enemy)
-            xp_gained = target_enemy.xp
+            self.map.remove_enemy(enemy)
+            self.enemies.remove(enemy)
+            xp_gained = enemy.xp
             self.player.gain_xp(xp_gained)
+            
+            messages.append(f"Defeated {enemy.name}! Gained {xp_gained} XP!")
+            
+            # Build loot message with items list
+            if loot_items:
+                items_str = ", ".join([str(item) for item in loot_items])
+                messages.append(f"Loot: {items_str}")
+            
+            return True, "\n".join(messages)
             
             # Build loot message with items list
             if loot_items:

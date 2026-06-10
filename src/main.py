@@ -136,6 +136,14 @@ class Game:
             self.state.current_enemy = None
             self.ui.add_log_message(f"Showing inventory ({len(self.state.player.inventory)} items)", "system")
 
+        elif cmd_type == "show_item_stats":
+            item = self.state.player.find_item_in_inventory(args)
+            if item:
+                stats_display = item.get_stats_display()
+                self.ui.add_log_message(stats_display, "system")
+            else:
+                self.ui.add_log_message(f"Item '{args}' not in inventory", "system")
+
         elif cmd_type == "show_loot_named":
             success, message = self.state.show_loot(owner_name=args)
             self.ui.add_log_message(message, "loot")
@@ -277,6 +285,10 @@ class Game:
         dx, dy = self.DIRECTIONS[direction]
         
         if self.state.player_move(dx, dy):
+            # Reset stats page to player view when moving away from loot/chests
+            if self.state.current_stats_page in ["loot", "chest"]:
+                self.state.current_stats_page = "player"
+            
             self.ui.add_log_message(f"Moved {direction}", "movement")
             enemy = self.state.get_adjacent_enemy()
             if enemy and enemy.alive:
@@ -313,6 +325,10 @@ class Game:
             
             # Try to move
             if self.state.player_move(dx, dy):
+                # Reset stats page to player view when moving away from loot/chests
+                if self.state.current_stats_page in ["loot", "chest"]:
+                    self.state.current_stats_page = "player"
+                
                 # Allow monsters to move (turn-based)
                 self._resolve_monster_turns()
                 
@@ -555,6 +571,10 @@ class Game:
             # Process movement if any direction pressed
             if (dx != 0 or dy != 0) and self.state.can_perform_action("move"):
                 if self.state.player_move(dx, dy):
+                    # Reset stats page to player view when moving away from loot/chests
+                    if self.state.current_stats_page in ["loot", "chest"]:
+                        self.state.current_stats_page = "player"
+                    
                     # Build direction name for log
                     direction_parts = []
                     if dy < 0:
@@ -625,6 +645,10 @@ class Game:
             dx, dy = direction_map[key]
             
             if self.state.player_move(dx, dy):
+                # Reset stats page to player view when moving away from loot/chests
+                if self.state.current_stats_page in ["loot", "chest"]:
+                    self.state.current_stats_page = "player"
+                
                 direction_names = {'w': 'north', 's': 'south', 'a': 'west', 'd': 'east'}
                 self.ui.add_log_message(f"Moved {direction_names[key]}", "movement")
                 self.state.set_cooldown("move", 0.2)

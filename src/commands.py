@@ -11,6 +11,7 @@ class CommandParser:
         "show_player_stats": r"^show\s+player\s+stats$",
         "show_enemy_stats": r"^show\s+enemy\s+stats$",
         "show_player_inventory": r"^show\s+player\s+inventory$",
+        "show_item_stats": r"^show\s+['\"]?(.+?)['\"]?\s+stats$",
         "show_loot_named": r"^show\s+(.+?)\s+loot$",
         "show_loot": r"^show\s+loot$",
         "show_chest": r"^show\s+chest$",
@@ -91,6 +92,7 @@ STATS & INFO:
   show player stats      - Show your stats
   show enemy stats       - Show enemy stats
   show player inventory  - Show your items
+  show [item] stats      - Show detailed item information
   show enemy inventory   - Show enemy's items (if dead)
   show chest inventory   - Show chest contents
   list commands / help   - Show this help

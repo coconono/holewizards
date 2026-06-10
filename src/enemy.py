@@ -29,6 +29,13 @@ class Enemy:
         self.defending = False
         self.last_direction = None  # Track last movement direction to avoid immediately backtracking
         
+        # Item effect bonuses
+        self.attack_bonus = 0
+        self.defense_bonus = 0
+        
+        # Active status effects (poison, burn, etc.)
+        self.status_effects = []
+        
         # Real-time mode properties
         self.action_timer = 0.0
         self.action_interval = random.uniform(0.5, 1.5)  # seconds between actions (varies by enemy)
@@ -100,6 +107,8 @@ class Enemy:
         damage = 1  # Base damage
         if self.equipped_weapon:
             damage = self.equipped_weapon.get_attack_value()
+        # Add attack bonus from equipment
+        damage += self.attack_bonus
         return damage
 
     def get_defense_value(self):
@@ -107,6 +116,8 @@ class Enemy:
         defense = 1  # Base defense reduction
         if self.equipped_armor:
             defense = self.equipped_armor.get_defense_value()
+        # Add defense bonus from equipment
+        defense += self.defense_bonus
         return defense
 
     def choose_action(self):
@@ -152,6 +163,48 @@ class Enemy:
                 if map_obj.is_valid_position(x, y):
                     visible.append((x, y))
         return visible
+    
+    def add_status_effect(self, status_info):
+        """Add or refresh a status effect."""
+        if not status_info:
+            return
+        
+        status_type = status_info.get('type', '')
+        
+        # Check if status already exists - if so, refresh it
+        for effect in self.status_effects:
+            if effect.get('type') == status_type:
+                # Refresh duration and damage
+                effect['damage'] = status_info.get('damage', effect['damage'])
+                effect['duration'] = status_info.get('duration', effect['duration'])
+                return
+        
+        # Add new status effect
+        self.status_effects.append(status_info)
+    
+    def process_status_effects(self):
+        """Process all status effects (damage over time, etc.). Returns list of effect messages."""
+        messages = []
+        effects_to_remove = []
+        
+        for i, effect in enumerate(self.status_effects):
+            effect_type = effect.get('type', '')
+            damage = effect.get('damage', 0)
+            
+            if damage > 0:
+                self.take_damage(damage)
+                messages.append(f"{self.name} takes {damage} {effect_type} damage!")
+            
+            effect['duration'] -= 1
+            if effect['duration'] <= 0:
+                effects_to_remove.append(i)
+                messages.append(f"The {effect_type} effect on {self.name} wears off.")
+        
+        # Remove expired effects (reverse order to maintain indices)
+        for i in reversed(effects_to_remove):
+            self.status_effects.pop(i)
+        
+        return messages
 
     def get_distance_to(self, target_pos):
         """Calculate Manhattan distance to target position."""

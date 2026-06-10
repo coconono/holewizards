@@ -3,8 +3,8 @@
 ## Tasks
 
 - [ ] Remove text mode
-- [ ] Implement sound
 - [ ] implement item information
 - [ ] implement spells
+- [ ] Implement sound
 - [ ] windows build
 - [ ] mac build

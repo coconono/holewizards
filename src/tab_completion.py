@@ -142,6 +142,10 @@ class TabCompletion:
         # Determine which argument we're completing
         partial_arg = tokens[-1].lower() if tokens else ""
         
+        # Special handling for "show" command with item stats
+        if command_name == "show":
+            return self._complete_show_command(tokens, full_input)
+        
         # Get argument completions based on command
         if command_name in ("take",):
             return self._complete_item_from_ground(partial_arg)
@@ -152,6 +156,70 @@ class TabCompletion:
         
         return []
 
+    def _complete_show_command(self, tokens, full_input):
+        """Complete 'show' command arguments (including 'show [item] stats').
+        
+        Args:
+            tokens: Tokens after 'show'
+            full_input: The full input string
+        
+        Returns:
+            List of matching completions
+        """
+        if not tokens:
+            # Just "show " - suggest all show subcommands
+            return ["player", "enemy", "loot", "chest"]
+        
+        # Check if completing "show X stats" pattern
+        if len(tokens) >= 2 and tokens[-1].lower() == "stats":
+            # Already have "stats", nothing more to complete
+            return []
+        
+        # Check if last token could be an item name or part of one
+        # Reconstruct the potential item name from tokens (excluding "stats" if present)
+        if tokens[-1].lower() == "stats":
+            item_tokens = tokens[:-1]
+        else:
+            item_tokens = tokens
+        
+        # Join tokens to form potential item name (handle multi-word items)
+        potential_item = " ".join(item_tokens).strip().strip('"')
+        
+        # Try to match against inventory items
+        if not self.game_state:
+            return []
+        
+        matches = []
+        partial_lower = potential_item.lower()
+        
+        # Get all inventory items
+        for item in self.game_state.player.inventory:
+            item_name = item.name
+            item_name_lower = item_name.lower()
+            
+            if item_name_lower.startswith(partial_lower):
+                # If item name has spaces, quote it
+                if " " in item_name:
+                    item_display = f'"{item_name}" stats'
+                else:
+                    item_display = f'{item_name} stats'
+                matches.append(item_display)
+            elif partial_lower in item_name_lower:
+                # Partial match in the middle - still suggest it
+                if " " in item_name:
+                    item_display = f'"{item_name}" stats'
+                else:
+                    item_display = f'{item_name} stats'
+                matches.append(item_display)
+        
+        # Also suggest standard show commands if they match
+        standard_options = ["player stats", "enemy stats", "player inventory", "loot", "chest"]
+        for option in standard_options:
+            if option.lower().startswith(partial_lower):
+                matches.append(option)
+        
+        return sorted(set(matches))
+
     def _get_all_commands(self):
         """Get all available commands from CommandParser.
         
@@ -159,6 +227,7 @@ class TabCompletion:
             List of command strings (e.g., ["show player stats", "move up", ...])
         """
         commands = [
+            "show",  # Base command for dynamic completion
             "show player stats",
             "show enemy stats",
             "show player inventory",
