@@ -1,0 +1,27 @@
+{
+  "frame": {
+    "background_rgba": [
+      20,
+      20,
+      20,
+      255
+    ],
+    "canvas_height": 450,
+    "canvas_width": 800,
+    "layers": [
+      {
+        "asset_id": "3da89516-7690-5612-a445-c8c63de11ff1",
+        "flip_x": false,
+        "flip_y": false,
+        "layer_id": "7020b561-f1e9-4d18-8181-14390ad408a2",
+        "opacity": 255,
+        "visible": true,
+        "x": 23,
+        "y": 293,
+        "z_index": 0
+      }
+    ],
+    "name": "frame_001"
+  },
+  "version": "1"
+}

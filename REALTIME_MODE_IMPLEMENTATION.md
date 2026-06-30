@@ -1,17 +1,20 @@
 # Real-Time Mode Implementation Summary
 
 ## Overview
+
 Successfully implemented real-time mode for Hole Wizards, allowing players to control their character using WASD keyboard controls instead of typing commands. All entities (player and enemies) act simultaneously based on time intervals.
 
 ## Features Implemented
 
 ### 1. Core Real-Time System
+
 - **Mode Toggle**: Type `realtime` to enter real-time mode, press `R` to exit
 - **Game Loop**: Continuous update loop running at ~30 FPS
 - **Input Polling**: Non-blocking keyboard input detection (cross-platform: Windows, Unix/macOS)
 - **Action Cooldowns**: Prevents action spam with configurable cooldowns per action
 
 ### 2. Player Controls (Real-Time Mode)
+
 | Key | Action | Cooldown |
 |-----|--------|----------|
 | W | Move North | 0.2s |
@@ -24,6 +27,7 @@ Successfully implemented real-time mode for Hole Wizards, allowing players to co
 | R | Exit real-time mode | Instant |
 
 ### 3. Enemy AI in Real-Time
+
 - Enemies act every 0.5-1.5 seconds (varies per enemy)
 - Uses existing reinforcement learning decision system
 - Enemies can attack each other (free-for-all combat)
@@ -31,18 +35,21 @@ Successfully implemented real-time mode for Hole Wizards, allowing players to co
 ### 4. Object Interaction Changes
 
 #### Loot Bag Physics
+
 - Loot bags are pushed when entities move onto them
 - Push direction: follows movement direction
 - If blocked, attempts to push to any adjacent open tile
 - If no tiles available, bag is **destroyed** (contents lost)
 
 #### Chest Blocking
+
 - Chests are **immovable obstacles** (like walls)
 - Entities cannot pass through or occupy chest tiles
 - Interacting with a chest (Space key) **automatically pauses** real-time mode
 - Player returns to text interface to loot items
 
 ### 5. UI Enhancements
+
 - **Mode Indicator**: Shows "[ REAL-TIME MODE ]" with HP/Mana at top
 - **Cooldown Display**: Shows status of all actions (e.g., "Move=READY, Suplex=1.2s")
 - **Colored Messages**: All log messages maintain color coding
@@ -50,9 +57,11 @@ Successfully implemented real-time mode for Hole Wizards, allowing players to co
 ## Files Modified
 
 ### New Files
+
 - `src/realtime_input.py` - Cross-platform keyboard input polling system
 
 ### Modified Files
+
 - `src/game_state.py` - Added real-time state, cooldowns, timer updates
 - `src/player.py` - Added action_timer and action_interval properties
 - `src/enemy.py` - Added action_timer and action_interval properties
@@ -62,11 +71,13 @@ Successfully implemented real-time mode for Hole Wizards, allowing players to co
 - `src/ui.py` - Added real-time mode indicators
 
 ### Test File
+
 - `test_realtime_mode.py` - Comprehensive test suite (all tests pass ✓)
 
 ## Technical Implementation Details
 
 ### Action Cooldown System
+
 ```python
 # In GameState
 self.action_cooldowns = {
@@ -83,6 +94,7 @@ def update_cooldowns(self, delta_time):
 ```
 
 ### Entity Timer System
+
 ```python
 # In Player/Enemy classes
 self.action_timer = 0.0
@@ -99,11 +111,13 @@ def update_entity_timers(self, delta_time):
 ```
 
 ### Input Polling (Cross-Platform)
+
 - **Unix/macOS**: Uses `termios` and `tty` for raw mode, `select` for non-blocking
 - **Windows**: Uses `msvcrt.kbhit()` and `msvcrt.getch()`
 - Handles both regular keys and arrow keys (mapped to WASD)
 
 ### Loot Bag Physics
+
 ```python
 def push_loot_bag(self, x, y, dx, dy, ui=None):
     # 1. Try to push in movement direction
@@ -130,6 +144,7 @@ def push_loot_bag(self, x, y, dx, dy, ui=None):
 ## Testing
 
 All features have been validated:
+
 - ✓ Mode toggle functionality
 - ✓ Action cooldown system
 - ✓ Entity timer updates
