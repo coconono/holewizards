@@ -2,7 +2,7 @@
 
 ASCII dungeon crawler RPG in Python.
 
-Current build status: playable in both graphics and text mode, with turn-based and real-time gameplay.
+Current build status: playable in graphics mode with turn-based and real-time gameplay.
 
 ## Introduction
 
@@ -14,11 +14,10 @@ Yes there is a manifesto but for the life of me I cannot find my beret.
 
 ## Current Feature Set
 
-- Graphics mode (pygame window, 1400x900 layout)
-- Text mode (`--text`) with ANSI-colored logs
+- Graphics mode (pygame window, 1400x900 layout) with ANSI-colored logs
 - Real-time mode toggle (`realtime`) with WASD controls
 - Turn-based command mode with command parsing and shortcuts
-- Context-aware tab completion in both text and graphics mode
+- Context-aware tab completion
 - Procedural dungeon map with fog-of-war exploration
 - Combat system: attack, suplex reposition, defend
 - Enemy AI actions each turn/frame, including enemy-vs-enemy combat
@@ -53,9 +52,6 @@ pip install -r requirements.txt
 
 # or run directly
 python3 src/main.py
-
-# force terminal/text mode
-python3 src/main.py --text
 ```
 
 ## Gameplay

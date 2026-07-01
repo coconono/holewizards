@@ -71,17 +71,11 @@ restart                      New game
 
 ## Text Mode Alternative
 
-If you prefer a traditional text interface:
-
-```bash
-python3 main.py --text
-```
-
-This uses your terminal instead of a graphics window.
+Graphics mode uses pygame and requires proper font support. If you encounter pygame issues, ensure pygame is properly installed in your Python environment.
 
 ## Future Improvements
 
-When pygame.font is fixed in a newer pygame version:
+When pygame rendering is fully optimized:
 
 1. Update `requirements.txt` to newer pygame
 2. Graphics mode will automatically render text

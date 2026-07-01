@@ -13,15 +13,15 @@
         "asset_id": "a6ec3335-5939-52a0-ae8d-230d76c4d4f5",
         "flip_x": false,
         "flip_y": false,
-        "layer_id": "cf49ae08-9be0-4c6c-ba1c-f22f8b995992",
+        "layer_id": "c0d59725-680b-4c97-99a1-2a7f03fe288c",
         "opacity": 255,
         "visible": true,
-        "x": 263,
-        "y": 316,
+        "x": 111,
+        "y": 312,
         "z_index": 0
       }
     ],
-    "name": "frame_003"
+    "name": "frame_002"
   },
   "version": "1"
 }

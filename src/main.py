@@ -34,41 +34,24 @@ class Game:
         "right": (1, 0),
     }
 
-    def __init__(self, use_graphics=True):
-        """Initialize the game.
-        
-        Args:
-            use_graphics: Whether to use graphical UI (requires pygame)
-        """
+    def __init__(self):
+        """Initialize the game in graphics mode."""
         self.state = GameState()
         self.running = True
         self.quit_game = False
         
-        # Initialize tab completion first (for both modes)
-        self.tab_completion = TabCompletion(self.state, use_readline=True)
+        # Initialize tab completion for graphics mode (no readline needed)
+        self.tab_completion = TabCompletion(self.state, use_readline=False)
         
-        # Choose UI backend
-        self.use_graphics = False
-        self.ui = None
-        self.text_ui = None
+        # Initialize graphics UI
+        if not GRAPHICS_AVAILABLE:
+            raise RuntimeError("Pygame is required to run Hole Wizards. Install it with: pip install pygame")
         
-        if use_graphics and GRAPHICS_AVAILABLE:
-            try:
-                graphics_ui = GraphicalUI(width=1400, height=900, tab_completion=self.tab_completion)
-                self.use_graphics = True
-                self.ui = graphics_ui
-                self.text_ui = None
-                # Disable readline in graphics mode
-                self.tab_completion.use_readline = False
-                print("✓ Graphics mode initialized (fallback rendering available)")
-            except Exception as e:
-                print(f"⚠ Graphics initialization failed: {e}")
-                print("Falling back to text mode")
-                self.ui = UI()
-                self.text_ui = self.ui
-        else:
-            self.ui = UI()
-            self.text_ui = self.ui
+        try:
+            self.ui = GraphicalUI(width=1400, height=900, tab_completion=self.tab_completion)
+            print("✓ Graphics mode initialized (fallback rendering available)")
+        except Exception as e:
+            raise RuntimeError(f"Graphics initialization failed: {e}")
         
         # Set UI reference on game state for enemy actions
         self.state.ui = self.ui
@@ -79,34 +62,16 @@ class Game:
         enemy_names = [enemy.name for enemy in self.state.enemies if enemy.alive]
         player_name = "You"  # Player is referred to as "You" in messages
         
-        if self.use_graphics:
-            # Graphical rendering
-            self.ui.set_entity_names(player_name, enemy_names)
-            enemy_to_display = self.state.current_enemy if self.state.current_stats_page == "enemy" else self.state.get_current_enemy()
-            # Calculate view distances based on sprite size (64x72 pixels with 72px spacing)
-            # Map area is 800x400, so we can fit ~11 tiles wide x ~5.5 tiles tall
-            # Use half of that to center the player (with some padding)
-            map_display = self.state.map.get_visible_map(self.state.player, x_distance=5, y_distance=2)
-            self.ui.render(self.state.player, enemy_to_display, map_display, self.state.current_stats_page,
-                          self.state.chest_items, self.state.loot_items, self.state.current_loot_enemy or "Unknown")
-            self.ui.tick()
-        else:
-            # Text rendering
-            self.text_ui.set_entity_names(player_name, enemy_names)
-            os.system("clear" if os.name == "posix" else "cls")
-            enemy_to_display = self.state.current_enemy if self.state.current_stats_page == "enemy" else self.state.get_current_enemy()
-            screen = self.text_ui.render_full_screen(
-                self.state.player,
-                enemy_to_display,
-                self.state.map,
-                self.state.current_stats_page,
-                self.state.chest_items,
-                self.state.loot_items,
-                self.state.current_loot_enemy or "Unknown",
-                self.state  # Pass game state for real-time mode indicators
-            )
-            print(screen)
-            print(self.text_ui.render_command_prompt(), end="", flush=True)
+        # Graphical rendering
+        self.ui.set_entity_names(player_name, enemy_names)
+        enemy_to_display = self.state.current_enemy if self.state.current_stats_page == "enemy" else self.state.get_current_enemy()
+        # Calculate view distances based on sprite size (64x72 pixels with 72px spacing)
+        # Map area is 800x400, so we can fit ~11 tiles wide x ~5.5 tiles tall
+        # Use half of that to center the player (with some padding)
+        map_display = self.state.map.get_visible_map(self.state.player, x_distance=5, y_distance=2)
+        self.ui.render(self.state.player, enemy_to_display, map_display, self.state.current_stats_page,
+                      self.state.chest_items, self.state.loot_items, self.state.current_loot_enemy or "Unknown")
+        self.ui.tick()
 
     def process_command(self, command_string):
         """Process a player command."""
@@ -181,17 +146,8 @@ class Game:
             if new_mode:
                 self.ui.add_log_message("Entering REAL-TIME MODE!", "status")
                 self.ui.add_log_message("Use WASD to move, Shift to suplex, Z to defend, Space to interact, R to exit", "status")
-                # Initialize real-time input system only for text mode
-                if not self.use_graphics:
-                    if not hasattr(self, 'realtime_input'):
-                        from realtime_input import RealtimeInput
-                        self.realtime_input = RealtimeInput()
-                    self.realtime_input.enter_realtime_mode()
             else:
                 self.ui.add_log_message("Returning to turn-based mode", "status")
-                # Exit realtime input only for text mode
-                if not self.use_graphics and hasattr(self, 'realtime_input'):
-                    self.realtime_input.exit_realtime_mode()
 
         # Movement commands
         elif cmd_type in ("move_up", "move_down", "move_left", "move_right"):
@@ -399,65 +355,19 @@ class Game:
 
     def show_intro(self):
         """Show the game intro."""
-        if self.use_graphics:
-            self.ui.render_intro_screen()
-        else:
-            os.system("clear" if os.name == "posix" else "cls")
-            
-            # Try to load intro text from file
-            intro_text = None
-            intro_msg_path = self._get_message_file("intro.msg")
-            if intro_msg_path:
-                try:
-                    with open(intro_msg_path, 'r') as f:
-                        intro_text = f.read().strip()
-                except:
-                    pass
-            
-            # Fallback intro text
-            if not intro_text:
-                intro_text = """
-╔═══════════════════════════════════════════════════════════════════════╗
-║                     WELCOME TO HOLE WIZARDS                           ║
-║                                                                       ║
-║  You have entered the Hole! A place of undescribable terror and       ║
-║  riches! You are a wizard! Cast your spells and swing your sword!     ║
-║                                                                       ║
-║  There are other wizards between you and the exit. They don't like    ║
-║  you! Beat them up, take their stuff and ESCAPE THE HOLE!             ║
-║                                                                       ║
-║  Commands: move up/down/left/right, attack, defend, take [item],      ║
-║           drop [item], equip [item], use [item],                      ║
-║           show player stats, list commands                            ║
-║                                                                       ║
-╚═══════════════════════════════════════════════════════════════════════╝
-        """
-            print(intro_text)
-            input("Press Enter to begin...")
+        self.ui.render_intro_screen()
 
     def show_help(self):
         """Display the help screen."""
-        if self.use_graphics:
-            help_text = self.text_ui.render_help() if self.text_ui else UI().render_help()
-            self.ui.full_screen_text = help_text
-            self.ui.showing_full_screen = "help"
-        else:
-            os.system("clear" if os.name == "posix" else "cls")
-            help_screen = self.text_ui.render_help()
-            print(help_screen)
-            input("\nPress Enter to return to the game...")
+        help_text = UI().render_help()
+        self.ui.full_screen_text = help_text
+        self.ui.showing_full_screen = "help"
 
     def show_legend(self):
         """Display the legend screen."""
-        if self.use_graphics:
-            legend_text = self.text_ui.render_legend() if self.text_ui else UI().render_legend()
-            self.ui.full_screen_text = legend_text
-            self.ui.showing_full_screen = "legend"
-        else:
-            os.system("clear" if os.name == "posix" else "cls")
-            legend_screen = self.text_ui.render_legend()
-            print(legend_screen)
-            input("\nPress Enter to return to the game...")
+        legend_text = UI().render_legend()
+        self.ui.full_screen_text = legend_text
+        self.ui.showing_full_screen = "legend"
 
     def show_game_over(self, result):
         """Show game over screen with performance statistics."""
@@ -472,48 +382,29 @@ class Game:
             except:
                 pass
         
-        if self.use_graphics:
-            # Graphics mode - render defeat/victory screen with stats
-            if result == "victory":
-                self.ui.render_victory_screen(self.state.combat_stats, message)
-            else:
-                self.ui.render_defeat_screen(self.state.combat_stats, message)
-            
-            # Wait for user input: Enter/Space to restart, ESC/Q to quit
-            waiting = True
-            while waiting:
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
+        # Graphics mode - render defeat/victory screen with stats
+        if result == "victory":
+            self.ui.render_victory_screen(self.state.combat_stats, message)
+        else:
+            self.ui.render_defeat_screen(self.state.combat_stats, message)
+        
+        # Wait for user input: Enter/Space to restart, ESC/Q to quit
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    waiting = False
+                    return "quit"
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE or event.key == pygame.K_q:
                         waiting = False
                         return "quit"
-                    elif event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_ESCAPE or event.key == pygame.K_q:
-                            waiting = False
-                            return "quit"
-                        elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
-                            waiting = False
-                            return "restart"
-                self.ui.clock.tick(30)
-            
-            return "restart"
-        else:
-            # Text mode - render defeat/victory screen with stats
-            os.system("clear" if os.name == "posix" else "cls")
-            
-            if result == "victory":
-                print(self.text_ui.render_victory_screen(self.state.combat_stats, message))
-            else:
-                print(self.text_ui.render_defeat_screen(self.state.combat_stats, message))
-            
-            # Wait for user input: Enter to restart, ESC/Q to quit
-            try:
-                user_input = input().strip().lower()
-                if user_input in ['q', 'quit', 'exit']:
-                    return "quit"
-                else:
-                    return "restart"
-            except (KeyboardInterrupt, EOFError):
-                return "quit"
+                    elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                        waiting = False
+                        return "restart"
+            self.ui.clock.tick(30)
+        
+        return "restart"
     
     def _run_realtime_frame(self):
         """Run a single frame of real-time mode."""
@@ -532,89 +423,71 @@ class Game:
         self.state.update_cooldowns(delta_time)
         self.state.update_entity_timers(delta_time)
         
-        # Handle input based on mode (graphics vs text)
-        if self.use_graphics:
-            # Graphics mode: use pygame key states for held keys
-            import pygame
-            
-            # Process pygame events for quit and action keys
-            action_keys = []
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.quit_game = True
-                    self.running = False
-                    return
-                elif event.type == pygame.KEYDOWN:
-                    # Map action keys (non-movement)
-                    if event.key == pygame.K_z:
-                        action_keys.append('z')
-                    elif event.key == pygame.K_r:
-                        action_keys.append('r')
-                    elif event.key == pygame.K_SPACE:
-                        action_keys.append(' ')
-                    elif event.key in (pygame.K_LSHIFT, pygame.K_RSHIFT):
-                        action_keys.append('S')
-            
-            # Check held keys for movement (supports diagonal)
-            pressed = pygame.key.get_pressed()
-            dx, dy = 0, 0
-            
-            if pressed[pygame.K_w]:
-                dy -= 1
-            if pressed[pygame.K_s]:
-                dy += 1
-            if pressed[pygame.K_a]:
-                dx -= 1
-            if pressed[pygame.K_d]:
-                dx += 1
-            
-            # Process movement if any direction pressed
-            if (dx != 0 or dy != 0) and self.state.can_perform_action("move"):
-                if self.state.player_move(dx, dy):
-                    # Reset stats page to player view when moving away from loot/chests
-                    if self.state.current_stats_page in ["loot", "chest"]:
-                        self.state.current_stats_page = "player"
-                    
-                    # Build direction name for log
-                    direction_parts = []
-                    if dy < 0:
-                        direction_parts.append("north")
-                    elif dy > 0:
-                        direction_parts.append("south")
-                    if dx < 0:
-                        direction_parts.append("west")
-                    elif dx > 0:
-                        direction_parts.append("east")
-                    
-                    direction_name = "-".join(direction_parts)
-                    self.ui.add_log_message(f"Moved {direction_name}", "movement")
-                    self.state.set_cooldown("move", 0.2)
-                    
-                    # Check for adjacent enemies
-                    enemy = self.state.get_adjacent_enemy()
-                    if enemy and enemy.alive:
-                        self.ui.add_log_message(f"You spot {enemy.name} nearby!", "movement")
-                else:
-                    self.ui.add_log_message("Cannot move - blocked", "movement")
-            
-            # Process action keys
-            for key in action_keys:
-                self._handle_realtime_action_key(key)
-            
-        else:
-            # Text mode: use terminal input polling
-            # Initialize realtime input if not already done
-            if not hasattr(self, 'realtime_input'):
-                from realtime_input import RealtimeInput
-                self.realtime_input = RealtimeInput()
-                self.realtime_input.enter_realtime_mode()
-            
-            # Poll for keyboard input
-            keys = self.realtime_input.poll_keys()
-            
-            # Process keys
-            for key in keys:
-                self._handle_realtime_key(key)
+        # Graphics mode: use pygame key states for held keys
+        import pygame
+        
+        # Process pygame events for quit and action keys
+        action_keys = []
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.quit_game = True
+                self.running = False
+                return
+            elif event.type == pygame.KEYDOWN:
+                # Map action keys (non-movement)
+                if event.key == pygame.K_z:
+                    action_keys.append('z')
+                elif event.key == pygame.K_r:
+                    action_keys.append('r')
+                elif event.key == pygame.K_SPACE:
+                    action_keys.append(' ')
+                elif event.key in (pygame.K_LSHIFT, pygame.K_RSHIFT):
+                    action_keys.append('S')
+        
+        # Check held keys for movement (supports diagonal)
+        pressed = pygame.key.get_pressed()
+        dx, dy = 0, 0
+        if pressed[pygame.K_w]:
+            dy -= 1
+        if pressed[pygame.K_s]:
+            dy += 1
+        if pressed[pygame.K_a]:
+            dx -= 1
+        if pressed[pygame.K_d]:
+            dx += 1
+        
+        # Process movement if any direction pressed
+        if (dx != 0 or dy != 0) and self.state.can_perform_action("move"):
+            if self.state.player_move(dx, dy):
+                # Reset stats page to player view when moving away from loot/chests
+                if self.state.current_stats_page in ["loot", "chest"]:
+                    self.state.current_stats_page = "player"
+                
+                # Build direction name for log
+                direction_parts = []
+                if dy < 0:
+                    direction_parts.append("north")
+                elif dy > 0:
+                    direction_parts.append("south")
+                if dx < 0:
+                    direction_parts.append("west")
+                elif dx > 0:
+                    direction_parts.append("east")
+                
+                direction_name = "-".join(direction_parts)
+                self.ui.add_log_message(f"Moved {direction_name}", "movement")
+                self.state.set_cooldown("move", 0.2)
+                
+                # Check for adjacent enemies
+                enemy = self.state.get_adjacent_enemy()
+                if enemy and enemy.alive:
+                    self.ui.add_log_message(f"You spot {enemy.name} nearby!", "movement")
+            else:
+                self.ui.add_log_message("Cannot move - blocked", "movement")
+        
+        # Process action keys
+        for key in action_keys:
+            self._handle_realtime_action_key(key)
         
         # Process enemy actions in real-time
         for enemy in self.state.enemies:
@@ -625,12 +498,8 @@ class Game:
         # Render
         self.render()
         
-        # Frame rate limiting (~30 FPS)
-        if self.use_graphics:
-            # Use pygame clock for graphics mode
-            self.ui.clock.tick(30)
-        else:
-            time.sleep(0.033)
+        # Frame rate limiting (~30 FPS) using pygame clock
+        self.ui.clock.tick(30)
     
     def _handle_realtime_key(self, key):
         """Handle a single keypress in real-time mode."""
@@ -694,8 +563,6 @@ class Game:
                         self.ui.add_log_message(message, "loot")
                         if success:
                             self.state.toggle_realtime_mode()
-                            if not self.use_graphics and hasattr(self, 'realtime_input'):
-                                self.realtime_input.exit_realtime_mode()
                             self.ui.add_log_message("Chest opened - returning to turn-based mode", "status")
                         chest_found = True
                         break
@@ -708,8 +575,6 @@ class Game:
         # Toggle back to turn-based mode (R key)
         elif key == 'r':
             self.state.toggle_realtime_mode()
-            if not self.use_graphics and hasattr(self, 'realtime_input'):
-                self.realtime_input.exit_realtime_mode()
             self.ui.add_log_message("Returning to turn-based mode", "status")
     
     def _handle_realtime_action_key(self, key):
@@ -792,48 +657,24 @@ class Game:
                 # Render game state
                 self.render()
 
-                # Get player input
-                if self.use_graphics:
-                    # Graphical input with tab completion
-                    # Update game state in tab completion for context-aware completions
-                    if self.tab_completion:
-                        self.tab_completion.set_game_state(self.state)
-                    
-                    command = self.ui.handle_events()
-                    if command == "quit":
-                        self.quit_game = True
-                        self.running = False
-                    elif command:
-                        self.process_command(command)
-                else:
-                    # Text input with tab completion
-                    try:
-                        # Update game state in tab completion for context-aware completions
-                        if self.tab_completion:
-                            self.tab_completion.set_game_state(self.state)
-                        
-                        command = input().strip()
-                        if command:
-                            self.process_command(command)
-                    except (KeyboardInterrupt, EOFError):
-                        print("\nThanks for playing Hole Wizards!")
-                        self.running = False
-                        break
+                # Get player input (graphics mode with tab completion)
+                # Update game state in tab completion for context-aware completions
+                if self.tab_completion:
+                    self.tab_completion.set_game_state(self.state)
+                
+                command = self.ui.handle_events()
+                if command == "quit":
+                    self.quit_game = True
+                    self.running = False
+                elif command:
+                    self.process_command(command)
 
 
 def main():
     """Entry point for the game."""
     try:
-        # Check command line arguments
-        use_graphics = "--text" not in sys.argv
-        
-        if use_graphics and not GRAPHICS_AVAILABLE:
-            print("Note: Pygame not installed. Falling back to text mode.")
-            print("Install pygame with: pip install pygame")
-            use_graphics = False
-        
         while True:
-            game = Game(use_graphics=use_graphics)
+            game = Game()
             game.run()
             
             # Exit if player quit

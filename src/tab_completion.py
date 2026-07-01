@@ -12,8 +12,7 @@ class TabCompletion:
         
         Args:
             game_state: The GameState object for context-aware completions
-            use_readline: Whether to use readline integration (text mode). 
-                         False for graphics mode.
+            use_readline: Whether to use readline integration. False for graphics mode.
         """
         self.game_state = game_state
         self.completion_matches = []
@@ -22,7 +21,7 @@ class TabCompletion:
         self.completion_query = ""  # The query that generated current completion_matches
         self.use_readline = use_readline
         
-        # Configure readline only if requested (text mode)
+        # Configure readline only if requested (graphics mode uses different completion)
         if use_readline:
             readline.set_completer(self.complete)
             # Allow tab completion

@@ -2,9 +2,10 @@
 
 ## Tasks
 
-- [ ] Remove text mode
+- [ ] implement animations
 - [ ] implement item information
 - [ ] implement spells
-- [ ] Implement sound
+- [ ] implement sound
+- [ ] implement metagame loop
 - [ ] windows build
 - [ ] mac build

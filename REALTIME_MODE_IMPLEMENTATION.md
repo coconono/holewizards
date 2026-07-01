@@ -16,7 +16,7 @@ Successfully implemented real-time mode for Hole Wizards, allowing players to co
 ### 2. Player Controls (Real-Time Mode)
 
 | Key | Action | Cooldown |
-|-----|--------|----------|
+| --- | ------ | -------- |
 | W | Move North | 0.2s |
 | A | Move West | 0.2s |
 | S | Move South | 0.2s |
@@ -34,7 +34,7 @@ Successfully implemented real-time mode for Hole Wizards, allowing players to co
 
 ### 4. Object Interaction Changes
 
-#### Loot Bag Physics
+#### Loot Bag object physics
 
 - Loot bags are pushed when entities move onto them
 - Push direction: follows movement direction
@@ -127,7 +127,7 @@ def push_loot_bag(self, x, y, dx, dy, ui=None):
 
 ## Usage Instructions
 
-1. **Start the game**: `python3 src/main.py --text`
+1. **Start the game**: `python3 src/main.py`
 2. **Enter real-time mode**: Type `realtime` at the command prompt
 3. **Play in real-time**: Use WASD to move, Shift to suplex, Z to defend, Space to interact
 4. **Exit real-time mode**: Press `R` to return to turn-based mode

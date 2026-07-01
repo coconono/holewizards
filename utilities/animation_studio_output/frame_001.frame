@@ -10,14 +10,14 @@
     "canvas_width": 800,
     "layers": [
       {
-        "asset_id": "3da89516-7690-5612-a445-c8c63de11ff1",
+        "asset_id": "a6ec3335-5939-52a0-ae8d-230d76c4d4f5",
         "flip_x": false,
         "flip_y": false,
-        "layer_id": "7020b561-f1e9-4d18-8181-14390ad408a2",
+        "layer_id": "dc420616-f4ac-40fe-bbdb-2eb7e360e4dc",
         "opacity": 255,
         "visible": true,
-        "x": 23,
-        "y": 293,
+        "x": 6,
+        "y": 315,
         "z_index": 0
       }
     ],

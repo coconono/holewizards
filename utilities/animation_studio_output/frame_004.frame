@@ -11,17 +11,17 @@
     "layers": [
       {
         "asset_id": "a6ec3335-5939-52a0-ae8d-230d76c4d4f5",
-        "flip_x": false,
+        "flip_x": true,
         "flip_y": false,
-        "layer_id": "cf49ae08-9be0-4c6c-ba1c-f22f8b995992",
+        "layer_id": "e8fa58fc-b5a9-4226-b31a-ce6700b51900",
         "opacity": 255,
         "visible": true,
-        "x": 263,
+        "x": 462,
         "y": 316,
         "z_index": 0
       }
     ],
-    "name": "frame_003"
+    "name": "frame_004"
   },
   "version": "1"
 }

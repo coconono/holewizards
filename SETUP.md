@@ -2,7 +2,9 @@
 
 ## Installation
 
-### Option 1: Using Virtual Environment (Recommended)
+### Requirements
+
+Hole Wizards requires **pygame** for graphics rendering.
 
 ```bash
 cd holewizards
@@ -11,38 +13,30 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Option 2: System Python with Text Mode
-
-If you don't want to use a virtual environment, you can run text mode without any dependencies:
-
-```bash
-python3 main.py --text
-```
-
 ## Running the Game
 
-### Automatic Mode (Recommended)
-
-The game will automatically detect available dependencies and choose the best UI:
+### Start the Game
 
 ```bash
 source .venv/bin/activate  # If using venv
-python3 main.py
+python3 src/main.py
 ```
 
-- If pygame is installed and fonts work, runs graphical mode
-- If pygame.font fails (known issue), automatically falls back to text mode
-- If pygame is not installed, runs text mode
-
-### Text Mode (Always Available)
-
-Force text-only mode:
+Or use the helper script:
 
 ```bash
-python3 main.py --text
+./run_game.sh
 ```
 
-## Known Issues
+## Troubleshooting
+
+### pygame not installed
+
+Hole Wizards requires pygame. Install it with:
+
+```bash
+pip install pygame
+```
 
 ### pygame.font Circular Import
 

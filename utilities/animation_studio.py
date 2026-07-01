@@ -390,6 +390,8 @@ class AnimationStudioApp:
         self.selected_layer_id: Optional[str] = None
         self.drag_active = False
         self.drag_offset = (0, 0)
+        self.asset_scroll_offset = 0
+        self.asset_row_height = 22
 
         self.timeline_selected_index = 0
         self.timeline_scroll_offset = 0
@@ -641,6 +643,33 @@ class AnimationStudioApp:
         list_height = self.timeline_visible_rows * self.timeline_row_height
         return self.pygame.Rect(list_x, list_y, list_width, list_height)
 
+    def _get_asset_list_rect(self):
+        """Return the clickable and scrollable asset list area."""
+        list_x = self.panel_left.x + 8
+        list_y = self.panel_left.y + 38
+        list_width = self.panel_left.width - 16
+        list_height = self.panel_left.height - 46
+        return self.pygame.Rect(list_x, list_y, list_width, list_height)
+
+    def _asset_visible_rows(self) -> int:
+        """Return how many asset rows fit in the current panel height."""
+        return max(1, self._get_asset_list_rect().height // self.asset_row_height)
+
+    def _ensure_asset_scroll_in_range(self) -> None:
+        """Clamp asset scroll offset to a valid range."""
+        max_offset = max(0, len(self.library.assets) - self._asset_visible_rows())
+        self.asset_scroll_offset = max(0, min(self.asset_scroll_offset, max_offset))
+
+    def _scroll_assets(self, delta_rows: int) -> None:
+        """Scroll asset list by a row delta."""
+        if not self.library.assets:
+            self.asset_scroll_offset = 0
+            return
+
+        self._ensure_asset_scroll_in_range()
+        max_offset = max(0, len(self.library.assets) - self._asset_visible_rows())
+        self.asset_scroll_offset = max(0, min(max_offset, self.asset_scroll_offset + delta_rows))
+
     def _ensure_selected_timeline_visible(self) -> None:
         """Keep selected timeline row in the visible window."""
         if not self.timeline.clips:
@@ -665,6 +694,39 @@ class AnimationStudioApp:
 
         max_offset = max(0, len(self.timeline.clips) - self.timeline_visible_rows)
         self.timeline_scroll_offset = max(0, min(max_offset, self.timeline_scroll_offset + delta_rows))
+
+    def _delete_selected_timeline_clip(self) -> bool:
+        """Delete currently selected timeline clip and keep selection valid."""
+        if not self.timeline.clips:
+            return False
+
+        if self.timeline_selected_index < 0 or self.timeline_selected_index >= len(self.timeline.clips):
+            self.timeline_selected_index = max(0, min(self.timeline_selected_index, len(self.timeline.clips) - 1))
+
+        removed = self.timeline.clips.pop(self.timeline_selected_index)
+
+        if not self.timeline.clips:
+            self.timeline_selected_index = 0
+            self.timeline_scroll_offset = 0
+            self.playing = False
+            self.play_cursor = 0
+            self.play_elapsed_ms = 0
+            self.status_message = f"Deleted clip: {removed.frame_name} (timeline empty)"
+            self.dirty = True
+            return True
+
+        if self.timeline_selected_index >= len(self.timeline.clips):
+            self.timeline_selected_index = len(self.timeline.clips) - 1
+
+        if self.play_cursor >= len(self.timeline.clips):
+            self.play_cursor = len(self.timeline.clips) - 1
+
+        self.play_elapsed_ms = 0
+        self._ensure_selected_timeline_visible()
+        self._activate_timeline_clip(self.timeline_selected_index, source="clip delete")
+        self.status_message = f"Deleted clip: {removed.frame_name}"
+        self.dirty = True
+        return True
 
     def load_from_path(self, path: Path) -> None:
         payload = load_json(path)
@@ -785,12 +847,39 @@ class AnimationStudioApp:
         # Asset browser.
         self._draw_text("Assets", self.panel_left.x + 10, self.panel_left.y + 10)
         self._draw_text(f"Count: {len(self.library.assets)}", self.panel_left.x + 140, self.panel_left.y + 10, color=(170, 245, 170), small=True)
-        y = self.panel_left.y + 40
-        for asset in self.library.assets[:28]:
+        asset_list_rect = self._get_asset_list_rect()
+        self.pygame.draw.rect(self.screen, (18, 18, 24), asset_list_rect)
+        self.pygame.draw.rect(self.screen, (70, 70, 92), asset_list_rect, 1)
+
+        self._ensure_asset_scroll_in_range()
+        visible_rows = self._asset_visible_rows()
+        start_index = self.asset_scroll_offset
+        end_index = min(len(self.library.assets), start_index + visible_rows)
+
+        y = asset_list_rect.y + 2
+        for idx in range(start_index, end_index):
+            asset = self.library.assets[idx]
             selected = asset.id == self.selected_asset_id
             color = (120, 220, 255) if selected else (220, 220, 220)
-            self._draw_text(asset.file_path, self.panel_left.x + 10, y, color=color, small=True)
-            y += 22
+            self._draw_text(asset.file_path, asset_list_rect.x + 6, y, color=color, small=True)
+            y += self.asset_row_height
+
+        if len(self.library.assets) > visible_rows:
+            scrollbar_w = 10
+            scrollbar_rect = self.pygame.Rect(asset_list_rect.right - scrollbar_w - 2, asset_list_rect.y + 2, scrollbar_w, asset_list_rect.height - 4)
+            self.pygame.draw.rect(self.screen, (28, 28, 36), scrollbar_rect)
+            self.pygame.draw.rect(self.screen, (90, 90, 110), scrollbar_rect, 1)
+
+            total = len(self.library.assets)
+            max_offset = total - visible_rows
+            thumb_h = max(12, int((visible_rows / total) * scrollbar_rect.height))
+            travel = scrollbar_rect.height - thumb_h
+            thumb_y = scrollbar_rect.y
+            if max_offset > 0 and travel > 0:
+                thumb_y += int((self.asset_scroll_offset / max_offset) * travel)
+
+            thumb_rect = self.pygame.Rect(scrollbar_rect.x + 1, thumb_y, scrollbar_w - 2, thumb_h)
+            self.pygame.draw.rect(self.screen, (180, 180, 210), thumb_rect)
 
         # Canvas area and frame bounds.
         canvas_x = self.panel_canvas.x + 40
@@ -946,7 +1035,7 @@ class AnimationStudioApp:
             small=True,
         )
         self._draw_text(
-            "H/V flip  PgUp/PgDn layer order  Delete remove  O/P opacity",
+            "H/V flip  PgUp/PgDn layer order  Delete/Backspace remove  O/P opacity",
             panel_x + 10,
             panel_y + 56,
             color=(160, 220, 255),
@@ -965,12 +1054,14 @@ class AnimationStudioApp:
                 self._activate_timeline_clip(clip_index, source="timeline click")
             return
 
-        if self.panel_left.collidepoint(x, y):
-            local_y = y - (self.panel_left.y + 40)
-            idx = local_y // 22
-            if 0 <= idx < len(self.library.assets):
-                self.selected_asset_id = self.library.assets[idx].id
-                self.status_message = f"Selected asset: {self.library.assets[idx].file_path}"
+        asset_list_rect = self._get_asset_list_rect()
+        if asset_list_rect.collidepoint(x, y):
+            local_y = y - (asset_list_rect.y + 2)
+            row = local_y // self.asset_row_height
+            asset_idx = self.asset_scroll_offset + row
+            if 0 <= asset_idx < len(self.library.assets):
+                self.selected_asset_id = self.library.assets[asset_idx].id
+                self.status_message = f"Selected asset: {self.library.assets[asset_idx].file_path}"
             return
 
         canvas_rect = self.pygame.Rect(self.panel_canvas.x + 40, self.panel_canvas.y + 30, self.current_frame.canvas_width, self.current_frame.canvas_height)
@@ -989,6 +1080,7 @@ class AnimationStudioApp:
 
     def _handle_keydown(self, event) -> None:
         pg = self.pygame
+        is_delete_key = event.key in (pg.K_DELETE, pg.K_BACKSPACE)
 
         if self.path_prompt_active:
             if event.key == pg.K_RETURN:
@@ -1099,6 +1191,10 @@ class AnimationStudioApp:
             self._activate_timeline_clip(min(len(self.timeline.clips) - 1, self.timeline_selected_index + 1), source="clip select")
             return
 
+        if is_delete_key and self.timeline.clips and not self.selected_layer_id:
+            self._delete_selected_timeline_clip()
+            return
+
         layer = self._layer_by_id(self.selected_layer_id)
         if not layer:
             return
@@ -1128,7 +1224,7 @@ class AnimationStudioApp:
         elif event.key == pg.K_PAGEDOWN:
             layer.z_index -= 1
             self.dirty = True
-        elif event.key == pg.K_DELETE:
+        elif is_delete_key:
             self.current_frame.layers = [entry for entry in self.current_frame.layers if entry.layer_id != layer.layer_id]
             self.selected_layer_id = None
             self.dirty = True
@@ -1178,13 +1274,25 @@ class AnimationStudioApp:
                 elif event.type == self.pygame.MOUSEBUTTONDOWN and event.button == 1:
                     self._handle_mouse_down(event)
                 elif event.type == self.pygame.MOUSEBUTTONDOWN and event.button == 4:
-                    self._scroll_timeline(-1)
+                    mouse_x, mouse_y = self.pygame.mouse.get_pos()
+                    if self._get_asset_list_rect().collidepoint(mouse_x, mouse_y):
+                        self._scroll_assets(-1)
+                    else:
+                        self._scroll_timeline(-1)
                 elif event.type == self.pygame.MOUSEBUTTONDOWN and event.button == 5:
-                    self._scroll_timeline(1)
+                    mouse_x, mouse_y = self.pygame.mouse.get_pos()
+                    if self._get_asset_list_rect().collidepoint(mouse_x, mouse_y):
+                        self._scroll_assets(1)
+                    else:
+                        self._scroll_timeline(1)
                 elif event.type == self.pygame.MOUSEBUTTONUP and event.button == 1:
                     self.drag_active = False
                 elif event.type == self.pygame.MOUSEWHEEL:
-                    self._scroll_timeline(-event.y)
+                    mouse_x, mouse_y = self.pygame.mouse.get_pos()
+                    if self._get_asset_list_rect().collidepoint(mouse_x, mouse_y):
+                        self._scroll_assets(-event.y)
+                    else:
+                        self._scroll_timeline(-event.y)
                 elif event.type == self.pygame.MOUSEMOTION and self.drag_active:
                     layer = self._layer_by_id(self.selected_layer_id)
                     if layer:

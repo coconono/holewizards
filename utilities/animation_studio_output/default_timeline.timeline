@@ -1,6 +1,19 @@
 {
   "timeline": {
-    "clips": [],
+    "clips": [
+      {
+        "duration_ms": 100,
+        "frame_name": "frame_001"
+      },
+      {
+        "duration_ms": 100,
+        "frame_name": "frame_002"
+      },
+      {
+        "duration_ms": 100,
+        "frame_name": "frame_003"
+      }
+    ],
     "fps_override": null,
     "library_name": "default_library",
     "loop": true,
